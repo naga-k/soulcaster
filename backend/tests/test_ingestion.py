@@ -62,9 +62,54 @@ def test_ingest_manual():
     }
     response = client.post("/ingest/manual", json=payload)
     assert response.status_code == 200
-    
+
     items = get_all_feedback_items()
     assert len(items) == 1
     assert items[0].source == "manual"
     assert items[0].title == "The login button is broken on mobile."
     assert items[0].body == "The login button is broken on mobile."
+
+def test_ingest_manual_long_text():
+    """Test that long text is properly truncated in title."""
+    long_text = "A" * 200
+    payload = {"text": long_text}
+    response = client.post("/ingest/manual", json=payload)
+    assert response.status_code == 200
+
+    items = get_all_feedback_items()
+    assert len(items) == 1
+    assert items[0].title == long_text[:80]
+    assert items[0].body == long_text
+
+def test_ingest_sentry_minimal_payload():
+    """Test Sentry ingestion with minimal payload (no exception data)."""
+    payload = {
+        "event_id": "sentry_minimal",
+        "message": "Minimal error"
+    }
+    response = client.post("/ingest/sentry", json=payload)
+    assert response.status_code == 200
+
+    items = get_all_feedback_items()
+    assert len(items) == 1
+    assert items[0].source == "sentry"
+    assert items[0].title == "Minimal error"
+    assert items[0].external_id == "sentry_minimal"
+
+def test_ingest_reddit_with_empty_body():
+    """Test Reddit post with no body text."""
+    payload = {
+        "id": "223e4567-e89b-12d3-a456-426614174000",
+        "source": "reddit",
+        "external_id": "t3_empty",
+        "title": "Bug report",
+        "body": "",
+        "metadata": {},
+        "created_at": "2023-10-27T10:00:00Z"
+    }
+    response = client.post("/ingest/reddit", json=payload)
+    assert response.status_code == 200
+
+    items = get_all_feedback_items()
+    assert len(items) == 1
+    assert items[0].body == ""
