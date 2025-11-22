@@ -245,16 +245,24 @@ def get_stats():
 @app.get("/clusters")
 def get_clusters():
     """
-    Get all issue clusters (placeholder for future clustering feature).
+    Get all issue clusters.
+
+    Returns a list of all clusters with their metadata. Currently returns
+    an empty list as clustering logic is not yet implemented.
 
     Returns:
-        Empty list for now, will return clustered issues in the future
+        Dictionary with:
+        - clusters: List of cluster dictionaries, each containing id, title,
+          summary, count, status, sources, and optional github_pr_url
+        - total: Total number of clusters (computed as len(clusters))
     """
     # TODO: Implement clustering logic
     # For now, return empty list with proper structure
+    clusters = []
+    total = len(clusters)
     return {
-        "clusters": [],
-        "total": 0,
+        "clusters": clusters,
+        "total": total,
     }
 @app.get("/clusters")
 def list_clusters():
