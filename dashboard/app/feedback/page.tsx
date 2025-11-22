@@ -6,6 +6,7 @@ import StatsCards from '@/components/StatsCards';
 import FeedbackList from '@/components/FeedbackList';
 import ManualFeedbackForm from '@/components/ManualFeedbackForm';
 import SourceConfig from '@/components/SourceConfig';
+import DashboardHeader from '@/components/DashboardHeader';
 
 export default function FeedbackPage() {
   const [showAddSource, setShowAddSource] = useState(false);
@@ -18,39 +19,17 @@ export default function FeedbackPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/" className="text-2xl font-bold text-blue-600">
-                FeedbackAgent
-              </Link>
-              <nav className="flex gap-1">
-                <Link
-                  href="/feedback"
-                  className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-md"
-                >
-                  Feedback
-                </Link>
-                <Link
-                  href="/clusters"
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
-                >
-                  Clusters
-                </Link>
-              </nav>
-            </div>
-
-            <button
-              onClick={() => setShowAddSource(!showAddSource)}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium transition-colors"
-            >
-              {showAddSource ? 'Hide Sources' : '+ Add Source'}
-            </button>
-          </div>
-        </div>
-      </div>
+      <DashboardHeader
+        activePage="feedback"
+        rightContent={
+          <button
+            onClick={() => setShowAddSource(!showAddSource)}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium transition-colors"
+          >
+            {showAddSource ? 'Hide Sources' : '+ Add Source'}
+          </button>
+        }
+      />
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

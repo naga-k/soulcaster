@@ -6,8 +6,28 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source');
-    const limit = searchParams.get('limit') || '100';
-    const offset = searchParams.get('offset') || '0';
+    const limitParam = searchParams.get('limit') || '100';
+    const offsetParam = searchParams.get('offset') || '0';
+
+    // Parse and validate limit
+    const limitNum = parseInt(limitParam, 10);
+    if (isNaN(limitNum) || limitNum < 1) {
+      return NextResponse.json(
+        { error: 'Invalid limit: must be a positive integer' },
+        { status: 400 }
+      );
+    }
+    const limit = Math.min(Math.max(limitNum, 1), 100).toString();
+
+    // Parse and validate offset
+    const offsetNum = parseInt(offsetParam, 10);
+    if (isNaN(offsetNum) || offsetNum < 0) {
+      return NextResponse.json(
+        { error: 'Invalid offset: must be a non-negative integer' },
+        { status: 400 }
+      );
+    }
+    const offset = Math.max(offsetNum, 0).toString();
 
     // Build query string
     const queryParams = new URLSearchParams({

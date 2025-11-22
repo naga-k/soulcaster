@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ClusterListItem } from '@/types';
+import DashboardHeader from '@/components/DashboardHeader';
 
 /**
  * Renders a client-side page that lists issue clusters and handles loading, error, and empty states.
@@ -16,33 +17,6 @@ export default function ClustersListPage() {
   const [clusters, setClusters] = useState<ClusterListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Header component
-  const Header = () => (
-    <div className="bg-white shadow-sm border-b border-gray-200 mb-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="text-2xl font-bold text-blue-600">
-            FeedbackAgent
-          </Link>
-          <nav className="flex gap-1">
-            <Link
-              href="/feedback"
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md"
-            >
-              Feedback
-            </Link>
-            <Link
-              href="/clusters"
-              className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-md"
-            >
-              Clusters
-            </Link>
-          </nav>
-        </div>
-      </div>
-    </div>
-  );
 
   useEffect(() => {
     fetchClusters();
@@ -81,19 +55,21 @@ export default function ClustersListPage() {
     }
   };
 
-  const getSourceIcon = (source: 'reddit' | 'sentry') => {
+  const getSourceIcon = (source: 'reddit' | 'sentry' | 'manual') => {
     switch (source) {
       case 'reddit':
         return '🗨️';
       case 'sentry':
         return '⚠️';
+      case 'manual':
+        return '✍️';
     }
   };
 
   if (loading) {
     return (
       <>
-        <Header />
+        <DashboardHeader activePage="clusters" className="mb-8" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-center py-12">
             <div className="text-gray-500">Loading clusters...</div>
@@ -106,7 +82,7 @@ export default function ClustersListPage() {
   if (error) {
     return (
       <>
-        <Header />
+        <DashboardHeader activePage="clusters" className="mb-8" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="rounded-md bg-red-50 p-4">
             <div className="flex">
@@ -130,7 +106,7 @@ export default function ClustersListPage() {
   if (clusters.length === 0) {
     return (
       <>
-        <Header />
+        <DashboardHeader activePage="clusters" className="mb-8" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center py-12 bg-purple-50 border border-purple-200 rounded-lg">
             <h3 className="text-lg font-medium text-purple-900 mb-2">🧠 Clustering Not Yet Implemented</h3>
@@ -152,7 +128,7 @@ export default function ClustersListPage() {
 
   return (
     <>
-      <Header />
+      <DashboardHeader activePage="clusters" className="mb-8" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900">Issue Clusters</h2>

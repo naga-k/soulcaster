@@ -24,13 +24,16 @@ from .store import (
 app = FastAPI(
     title="FeedbackAgent Ingestion API",
     description="API for ingesting user feedback from multiple sources",
-    version="0.1.0"
+    version="0.1.0",
 )
 
 # Configure CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Next.js dev server
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],  # Next.js dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,17 +100,20 @@ def ingest_sentry(payload: dict):
             title=title,
             body=body,
             metadata=payload,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
         )
         add_feedback_item(item)
         return {"status": "ok", "id": str(item.id)}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process Sentry payload: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process Sentry payload: {str(e)}"
+        )
 
 
 class ManualIngestRequest(BaseModel):
     """Request model for manual feedback submission."""
+
     text: str
 
 
@@ -130,7 +136,7 @@ def ingest_manual(request: ManualIngestRequest):
         title=request.text[:80],  # Truncate title to 80 chars
         body=request.text,
         metadata={},
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(timezone.utc),
     )
     add_feedback_item(item)
     return {"status": "ok", "id": str(item.id)}
@@ -141,8 +147,12 @@ def ingest_manual(request: ManualIngestRequest):
 
 @app.get("/feedback")
 def get_feedback(
-    source: Optional[str] = Query(None, description="Filter by source (reddit, sentry, manual)"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of items to return"),
+    source: Optional[str] = Query(
+        None, description="Filter by source (reddit, sentry, manual)"
+    ),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of items to return"
+    ),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
 ):
     """
@@ -191,7 +201,9 @@ def get_feedback_by_id(item_id: UUID):
     """
     item = get_feedback_item(item_id)
     if item is None:
-        raise HTTPException(status_code=404, detail=f"Feedback item {item_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Feedback item {item_id} not found"
+        )
     return item
 
 
@@ -212,7 +224,8 @@ def get_stats():
     # Count by source
     by_source = {"reddit": 0, "sentry": 0, "manual": 0}
     for item in all_items:
-        by_source[item.source] += 1
+        if item.source in by_source:
+            by_source[item.source] += 1
 
     return {
         "total_feedback": total,
