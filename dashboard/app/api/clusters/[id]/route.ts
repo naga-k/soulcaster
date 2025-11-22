@@ -14,7 +14,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const response = await fetch(`${BACKEND_URL}/clusters/${id}`, {
+
+    // Validate ID format (UUID or numeric)
+    if (!id || !/^[a-zA-Z0-9-]+$/.test(id)) {
+      return NextResponse.json(
+        { error: 'Invalid cluster ID' },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetch(`${BACKEND_URL}/clusters/${encodeURIComponent(id)}`, {
       headers: {
         'Content-Type': 'application/json',
       },

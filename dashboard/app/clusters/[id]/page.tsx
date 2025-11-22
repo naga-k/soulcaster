@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ClusterDetail } from '@/types';
 
@@ -14,7 +14,6 @@ import type { ClusterDetail } from '@/types';
  */
 export default function ClusterDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const clusterId = params.id as string;
 
   const [cluster, setCluster] = useState<ClusterDetail | null>(null);
