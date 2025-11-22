@@ -12,6 +12,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {
