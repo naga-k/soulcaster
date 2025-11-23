@@ -48,10 +48,10 @@ def _seed_cluster_with_feedback():
         add_feedback_item(item)
 
     cluster = IssueCluster(
-        id=uuid4(),
+        id=str(uuid4()),
         title="Export issues",
         summary="Crashes and type errors during export flow",
-        feedback_ids=[feedback_one.id, feedback_two.id],
+        feedback_ids=[str(feedback_one.id), str(feedback_two.id)],
         status="new",
         created_at=now,
         updated_at=now,
@@ -110,7 +110,7 @@ def test_start_fix_updates_cluster_status():
 def test_cluster_fields_include_github_metadata():
     now = datetime.now(timezone.utc)
     cluster = IssueCluster(
-        id=uuid4(),
+        id=str(uuid4()),
         title="GitHub PR Cluster",
         summary="Cluster with PR",
         feedback_ids=[],

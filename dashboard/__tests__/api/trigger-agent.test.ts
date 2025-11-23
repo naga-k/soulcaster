@@ -1,6 +1,10 @@
 import { getGitHubToken } from '@/lib/auth';
 
 // Mock the auth module
+jest.mock('next-auth', () => ({
+  getServerSession: jest.fn(),
+}));
+jest.mock('next-auth/providers/github', () => jest.fn());
 jest.mock('@/lib/auth');
 
 const mockGetGitHubToken = getGitHubToken as jest.MockedFunction<typeof getGitHubToken>;

@@ -33,10 +33,11 @@
 - [x] Store cluster embedding_centroid @Colleague @Frontend
 
 ### Coding Agent (External AWS Service)
+### Coding Agent (External AWS Service)
 - [ ] Obtain AWS Agent API endpoint and credentials @Sam @Backend
 - [ ] Implement AgentClient wrapper (send prompt -> receive PR URL) @Sam @Backend
 - [ ] Update /clusters/{id}/start_fix to call AgentClient @Sam @Backend
-- [ ] Implement polling/webhook to track Agent progress @Sam @Backend
+- [x] Implement Job tracking API (POST/PATCH /jobs) @Sam @Backend
 - [ ] Update IssueCluster with PR URL from Agent response @Sam @Backend
 - [ ] Add logging for Agent API calls @Sam @Backend
 

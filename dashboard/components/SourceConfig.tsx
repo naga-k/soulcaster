@@ -400,9 +400,9 @@ export default function SourceConfig() {
                         >
                           {repo.full_name}
                         </a>
-                        {repo.issue_count > 0 && (
+                        {(repo.issue_count || 0) > 0 && (
                           <span className="text-xs text-slate-500">
-                            ({repo.issue_count} issues)
+                            ({repo.issue_count || 0} issues)
                           </span>
                         )}
                       </div>
