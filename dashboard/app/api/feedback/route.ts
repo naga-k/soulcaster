@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const source = searchParams.get('source');
+    const repo = searchParams.get('repo');
     const limitParam = searchParams.get('limit') || '100';
     const offsetParam = searchParams.get('offset') || '0';
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(offsetNum, 0);
 
     // Fetch from Redis
-    const data = await getFeedback(limit, offset, source || undefined);
+    const data = await getFeedback(limit, offset, source || undefined, repo || undefined);
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching feedback from Redis:', error);

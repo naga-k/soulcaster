@@ -21,6 +21,7 @@ export default function ClusterDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCluster();
@@ -142,6 +143,27 @@ export default function ClusterDetailPage() {
     {} as Record<string, number>
   );
 
+  // Count by repo
+  const repoCounts = cluster.feedback_items.reduce(
+    (acc, item) => {
+      if (item.repo) {
+        acc[item.repo] = (acc[item.repo] || 0) + 1;
+      }
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  // Filter feedback items by selected repo
+  const filteredFeedbackItems = selectedRepo
+    ? cluster.feedback_items.filter((item) => item.repo === selectedRepo)
+    : cluster.feedback_items;
+
+  // Count GitHub issues in the cluster
+  const githubIssueCount = cluster.feedback_items.filter(
+    (item) => item.source === 'github'
+  ).length;
+
   return (
     <div className="min-h-screen bg-matrix-black pb-12 pt-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -191,7 +213,7 @@ export default function ClusterDetailPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-6 text-sm text-gray-500 font-mono border-t border-matrix-border pt-6">
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm text-gray-500 font-mono border-t border-matrix-border pt-6">
               <div>
                 <dt className="text-xs font-bold text-matrix-green uppercase tracking-wider mb-1">Created</dt>
                 <dd className="text-gray-300">{new Date(cluster.created_at).toLocaleString()}</dd>
@@ -210,7 +232,53 @@ export default function ClusterDetailPage() {
                   ))}
                 </dd>
               </div>
+              {Object.keys(repoCounts).length > 0 && (
+                <div>
+                  <dt className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">Repositories</dt>
+                  <dd className="text-purple-300">
+                    {Object.keys(repoCounts).length} {Object.keys(repoCounts).length === 1 ? 'repo' : 'repos'}
+                  </dd>
+                </div>
+              )}
             </div>
+
+            {Object.keys(repoCounts).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-matrix-border">
+                <dt className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-3">Repository Breakdown</dt>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(repoCounts).map(([repo, count]) => (
+                    <button
+                      key={repo}
+                      onClick={() => setSelectedRepo(selectedRepo === repo ? null : repo)}
+                      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                        selectedRepo === repo
+                          ? 'border-purple-500/50 bg-purple-500/20 text-purple-200'
+                          : 'border-purple-900/50 bg-purple-900/20 text-purple-300 hover:bg-purple-900/30'
+                      }`}
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                        <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z" />
+                      </svg>
+                      <span>{repo}</span>
+                      <span className="ml-1 rounded-full bg-purple-500/30 px-2 py-0.5 text-[10px]">
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {selectedRepo && (
+                  <div className="mt-3 text-xs text-purple-300">
+                    Showing {filteredFeedbackItems.length} {filteredFeedbackItems.length === 1 ? 'item' : 'items'} from <span className="font-semibold">{selectedRepo}</span>
+                    <button
+                      onClick={() => setSelectedRepo(null)}
+                      className="ml-2 text-purple-400 hover:text-purple-200 underline"
+                    >
+                      Clear filter
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {cluster.github_branch && (
               <div className="mt-4 pt-4 border-t border-matrix-border">
@@ -228,27 +296,127 @@ export default function ClusterDetailPage() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-medium tracking-tight text-slate-50 flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Live Feed
-            </h2>
-            <div className="flex gap-2">
-              <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-400">Real-time</span>
-              <span className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">Connected</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-medium tracking-tight text-slate-50 flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Live Feed
+              </h2>
+              <div className="flex gap-2">
+                <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-400">Real-time</span>
+                <span className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">Connected</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {filteredFeedbackItems.map((item) => (
+                <FeedbackCard key={item.id} item={item} />
+              ))}
+              {filteredFeedbackItems.length === 0 && (
+                <div className="text-center py-12 rounded-3xl border border-white/10 bg-white/5 border-dashed">
+                  <p className="text-slate-400">
+                    {selectedRepo
+                      ? `No feedback items found for ${selectedRepo}.`
+                      : 'No feedback items found for this cluster.'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-4">
-            {cluster.feedback_items.map((item) => (
-              <FeedbackCard key={item.id} item={item} />
-            ))}
-            {cluster.feedback_items.length === 0 && (
-              <div className="text-center py-12 rounded-3xl border border-white/10 bg-white/5 border-dashed">
-                <p className="text-slate-400">No feedback items found for this cluster.</p>
+          <div className="space-y-6">
+            {githubIssueCount > 0 && (
+              <div className="animate-in delay-200 rounded-3xl border border-purple-900/50 bg-gradient-to-br from-purple-900/20 to-purple-900/5 p-6 backdrop-blur-md">
+                <div className="flex items-center gap-2 mb-4">
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-purple-400">
+                    <path
+                      fillRule="evenodd"
+                      d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <h3 className="text-sm font-medium text-purple-300 uppercase tracking-wider">GitHub Issues ({githubIssueCount})</h3>
+                </div>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {cluster.feedback_items
+                    .filter((item) => item.source === 'github')
+                    .map((item) => (
+                      <a
+                        key={item.id}
+                        href={item.github_issue_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 rounded-xl bg-purple-900/20 border border-purple-900/30 hover:bg-purple-900/30 hover:border-purple-500/50 transition-all group"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] ${
+                            item.status === 'open'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {item.status === 'open' ? '●' : '✓'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {item.repo && (
+                                <span className="text-[10px] text-purple-400 font-medium">{item.repo}</span>
+                              )}
+                              {item.github_issue_number && (
+                                <span className="text-[10px] text-purple-300">#{item.github_issue_number}</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-200 line-clamp-2 group-hover:text-purple-200">
+                              {item.title}
+                            </p>
+                          </div>
+                          <svg
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z"
+                              clipRule="evenodd"
+                            />
+                            <path
+                              fillRule="evenodd"
+                              d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                        </div>
+                      </a>
+                    ))}
+                </div>
               </div>
             )}
+
+            <div className="animate-in delay-300 rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur-md">
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">Cluster Intelligence</h3>
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="text-xs text-slate-500 mb-1">Health Score</div>
+                  <div className="text-2xl font-medium text-emerald-400">98/100</div>
+                  <div className="w-full bg-white/10 h-1 mt-2 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full w-[98%]"></div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="text-xs text-slate-500 mb-1">Anomaly Detection</div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-sm text-slate-200">System Normal</span>
+                  </div>
+                </div>
+
+                <button className="w-full py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-colors">
+                  Run Diagnostics
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

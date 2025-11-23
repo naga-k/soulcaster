@@ -26,7 +26,7 @@ def setup_function():
 def _seed_cluster():
     now = datetime.now(timezone.utc)
     cluster = IssueCluster(
-        id=uuid4(),
+        id=str(uuid4()),
         title="Test Cluster",
         summary="Test Summary",
         feedback_ids=[],
