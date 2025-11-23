@@ -1,30 +1,17 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+import { getClusters } from '@/lib/redis';
 
 /**
- * Proxy GET requests to fetch cluster data from the configured backend.
+ * Fetch cluster data directly from Redis.
  *
- * @returns A JSON Response containing the backend's cluster data on success, or `{ error: 'Failed to fetch clusters' }` with HTTP status 500 on failure.
+ * @returns A JSON Response containing cluster data on success, or `{ error: 'Failed to fetch clusters' }` with HTTP status 500 on failure.
  */
 export async function GET() {
   try {
-    const response = await fetch(`${BACKEND_URL}/clusters`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Backend responded with ${response.status}`);
-    }
-
-    const data = await response.json();
-    // Backend returns { clusters: [], total: 0 }
-    // Frontend expects array directly for now
-    return NextResponse.json(data.clusters || []);
+    const clusters = await getClusters();
+    return NextResponse.json(clusters);
   } catch (error) {
-    console.error('Error fetching clusters:', error);
+    console.error('Error fetching clusters from Redis:', error);
     return NextResponse.json(
       { error: 'Failed to fetch clusters' },
       { status: 500 }

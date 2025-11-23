@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+import { getFeedback } from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +16,7 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    const limit = Math.min(Math.max(limitNum, 1), 100).toString();
+    const limit = Math.min(Math.max(limitNum, 1), 100);
 
     // Parse and validate offset
     const offsetNum = parseInt(offsetParam, 10);
@@ -27,31 +26,13 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    const offset = Math.max(offsetNum, 0).toString();
+    const offset = Math.max(offsetNum, 0);
 
-    // Build query string
-    const queryParams = new URLSearchParams({
-      limit,
-      offset,
-    });
-    if (source) {
-      queryParams.append('source', source);
-    }
-
-    const response = await fetch(`${BACKEND_URL}/feedback?${queryParams}`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Backend returned ${response.status}`);
-    }
-
-    const data = await response.json();
+    // Fetch from Redis
+    const data = await getFeedback(limit, offset, source || undefined);
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching feedback:', error);
+    console.error('Error fetching feedback from Redis:', error);
     return NextResponse.json(
       { error: 'Failed to fetch feedback' },
       { status: 500 }

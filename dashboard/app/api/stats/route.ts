@@ -1,23 +1,12 @@
 import { NextResponse } from 'next/server';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+import { getStats } from '@/lib/redis';
 
 export async function GET() {
   try {
-    const response = await fetch(`${BACKEND_URL}/stats`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Backend returned ${response.status}`);
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
+    const stats = await getStats();
+    return NextResponse.json(stats);
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    console.error('Error fetching stats from Redis:', error);
     return NextResponse.json(
       { error: 'Failed to fetch stats' },
       { status: 500 }

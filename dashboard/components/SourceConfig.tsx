@@ -1,18 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type SourceType = 'reddit' | 'sentry';
 
 export default function SourceConfig() {
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
+  const [subreddits, setSubreddits] = useState<string[]>([]);
+  const [newSubreddit, setNewSubreddit] = useState('');
+  const [loadingSubs, setLoadingSubs] = useState(false);
+  const [savingSubs, setSavingSubs] = useState(false);
+  const [subsMessage, setSubsMessage] = useState<string | null>(null);
+  const [subsError, setSubsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingSubs(true);
+      setSubsError(null);
+      try {
+        const res = await fetch('/api/config/reddit/subreddits', { cache: 'no-store' });
+        const data = await res.json();
+        setSubreddits(data.subreddits ?? []);
+      } catch (err) {
+        setSubsError('Failed to load subreddit config');
+      } finally {
+        setLoadingSubs(false);
+      }
+    };
+    load();
+  }, []);
 
   const sources = [
     {
       type: 'reddit' as const,
       icon: '🗨️',
       title: 'Reddit Integration',
-      description: 'Monitor subreddits for bug reports and feature requests',
+      description: 'Monitor subreddits (JSON polling, no OAuth)',
     },
     {
       type: 'sentry' as const,
@@ -21,6 +44,44 @@ export default function SourceConfig() {
       description: 'Receive error reports from Sentry in real-time',
     },
   ];
+
+  const addSubreddit = () => {
+    const slug = newSubreddit.trim().toLowerCase();
+    if (!slug) return;
+    if (subreddits.includes(slug)) {
+      setNewSubreddit('');
+      return;
+    }
+    setSubreddits((prev) => [...prev, slug]);
+    setNewSubreddit('');
+  };
+
+  const removeSubreddit = (slug: string) => {
+    setSubreddits((prev) => prev.filter((s) => s !== slug));
+  };
+
+  const saveSubreddits = async () => {
+    setSavingSubs(true);
+    setSubsMessage(null);
+    setSubsError(null);
+    try {
+      const res = await fetch('/api/config/reddit/subreddits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subreddits }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.detail || 'Failed to save');
+      }
+      setSubreddits(data.subreddits ?? []);
+      setSubsMessage('Saved subreddit list');
+    } catch (err: any) {
+      setSubsError(err?.message || 'Failed to save subreddit list');
+    } finally {
+      setSavingSubs(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -45,31 +106,91 @@ export default function SourceConfig() {
       </div>
 
       {selectedSource === 'reddit' && (
-        <div className="border-t pt-4 space-y-3">
-          <h4 className="font-semibold text-gray-900">Reddit Setup Instructions</h4>
-          <div className="bg-gray-50 p-4 rounded-md text-sm space-y-2">
-            <p><strong>1. Set environment variables:</strong></p>
-            <pre className="bg-gray-800 text-gray-100 p-2 rounded overflow-x-auto">
-{`export REDDIT_CLIENT_ID="your_client_id"
-export REDDIT_CLIENT_SECRET="your_secret"
-export REDDIT_SUBREDDIT="programming"`}
-            </pre>
+        <div className="border-t pt-4 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className="font-semibold text-gray-900">Reddit Poller</h4>
+              <p className="text-sm text-gray-600">
+                Uses public JSON feeds (no OAuth). Poller reads this list from Redis and posts to the backend.
+              </p>
+            </div>
+            <span className="text-xs font-medium text-gray-500">
+              1 req/sec per subreddit, caches with ETags
+            </span>
+          </div>
 
-            <p><strong>2. Run the Reddit poller:</strong></p>
-            <pre className="bg-gray-800 text-gray-100 p-2 rounded overflow-x-auto">
-              python -m backend.reddit_poller
-            </pre>
-
-            <p className="text-gray-600 mt-3">
-              📖 Get Reddit API credentials from{' '}
-              <a
-                href="https://www.reddit.com/prefs/apps"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
+          <div className="bg-gray-50 p-4 rounded-md space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="text"
+                placeholder="add subreddit (e.g., claudeai)"
+                value={newSubreddit}
+                onChange={(e) => setNewSubreddit(e.target.value)}
+                className="flex-1 min-w-[200px] rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={addSubreddit}
+                className="px-3 py-2 text-sm font-semibold text-white bg-blue-600 rounded hover:bg-blue-700"
               >
-                reddit.com/prefs/apps
-              </a>
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={saveSubreddits}
+                disabled={savingSubs || subreddits.length === 0}
+                className={`px-3 py-2 text-sm font-semibold rounded ${
+                  savingSubs || subreddits.length === 0
+                    ? 'bg-gray-300 text-gray-600'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {savingSubs ? 'Saving…' : 'Save list'}
+              </button>
+            </div>
+
+            {loadingSubs ? (
+              <p className="text-sm text-gray-500">Loading subreddits…</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {subreddits.length === 0 && (
+                  <span className="text-sm text-gray-500">No subreddits configured yet.</span>
+                )}
+                {subreddits.map((sub) => (
+                  <span
+                    key={sub}
+                    className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 text-sm"
+                  >
+                    r/{sub}
+                    <button
+                      type="button"
+                      onClick={() => removeSubreddit(sub)}
+                      className="text-gray-500 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {subsMessage && <p className="text-sm text-green-700">{subsMessage}</p>}
+            {subsError && <p className="text-sm text-red-600">{subsError}</p>}
+            <p className="text-xs text-gray-500">
+              Keep this list small (e.g., 1–3 subs). Poller runs server-side: `python -m backend.reddit_poller`.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-md text-sm space-y-2">
+            <p><strong>Poller command (runs continuously):</strong></p>
+            <pre className="bg-gray-800 text-gray-100 p-2 rounded overflow-x-auto">
+{`BACKEND_URL=http://localhost:8000 \\
+UPSTASH_REDIS_REST_URL=... \\
+UPSTASH_REDIS_REST_TOKEN=... \\
+python -m backend.reddit_poller`}
+            </pre>
+            <p className="text-gray-600">
+              The poller re-reads this list every cycle (5–10 minutes by default) and posts new items to `/ingest/reddit`.
             </p>
           </div>
         </div>
