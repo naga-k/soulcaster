@@ -6,7 +6,6 @@ import StatsCards from '@/components/StatsCards';
 import FeedbackList from '@/components/FeedbackList';
 import ManualFeedbackForm from '@/components/ManualFeedbackForm';
 import SourceConfig from '@/components/SourceConfig';
-import DashboardHeader from '@/components/DashboardHeader';
 
 export default function FeedbackPage() {
   const [showAddSource, setShowAddSource] = useState(false);
@@ -19,20 +18,17 @@ export default function FeedbackPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader
-        activePage="feedback"
-        rightContent={
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-end mb-6">
           <button
             onClick={() => setShowAddSource(!showAddSource)}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium transition-colors"
           >
             {showAddSource ? 'Hide Sources' : '+ Add Source'}
           </button>
-        }
-      />
+        </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats */}
         <StatsCards key={refreshTrigger} />
 

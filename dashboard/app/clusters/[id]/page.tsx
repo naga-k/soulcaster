@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import type { ClusterDetail, FeedbackSource } from '@/types';
-import DashboardHeader from '@/components/DashboardHeader';
 import FeedbackCard from '@/components/FeedbackCard';
 
 /**
@@ -100,29 +99,33 @@ export default function ClusterDetailPage() {
 
   if (loading && !cluster) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading cluster details...</div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500">Loading cluster details...</div>
+        </div>
       </div>
     );
   }
 
   if (error || !cluster) {
     return (
-      <div className="rounded-md bg-red-50 p-4">
-        <div className="flex">
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error loading cluster</h3>
-            <div className="mt-2 text-sm text-red-700">{error || 'Cluster not found'}</div>
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={fetchCluster}
-                className="text-sm font-medium text-red-800 hover:text-red-900"
-              >
-                Try again
-              </button>
-              <Link href="/" className="text-sm font-medium text-red-800 hover:text-red-900">
-                Back to clusters
-              </Link>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading cluster</h3>
+              <div className="mt-2 text-sm text-red-700">{error || 'Cluster not found'}</div>
+              <div className="mt-4 flex gap-3">
+                <button
+                  onClick={fetchCluster}
+                  className="text-sm font-medium text-red-800 hover:text-red-900"
+                >
+                  Try again
+                </button>
+                <Link href="/" className="text-sm font-medium text-red-800 hover:text-red-900">
+                  Back to clusters
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -140,8 +143,7 @@ export default function ClusterDetailPage() {
   );
 
   return (
-    <div className="min-h-screen bg-matrix-black pb-12">
-      <DashboardHeader activePage="clusters" className="mb-8" />
+    <div className="min-h-screen bg-matrix-black pb-12 pt-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Link

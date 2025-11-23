@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ClusterListItem } from '@/types';
-import DashboardHeader from '@/components/DashboardHeader';
 
 /**
  * Renders a client-side page that lists issue clusters and handles loading, error, and empty states.
@@ -113,68 +112,58 @@ export default function ClustersListPage() {
 
   if (loading) {
     return (
-      <>
-        <DashboardHeader activePage="clusters" className="mb-8" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">Loading clusters...</div>
-          </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-500">Loading clusters...</div>
         </div>
-      </>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <>
-        <DashboardHeader activePage="clusters" className="mb-8" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="rounded-md bg-red-50 p-4">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Error loading clusters</h3>
-                <div className="mt-2 text-sm text-red-700">{error}</div>
-                <button
-                  onClick={fetchClusters}
-                  className="mt-3 text-sm font-medium text-red-800 hover:text-red-900"
-                >
-                  Try again
-                </button>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="rounded-md bg-red-50 p-4">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading clusters</h3>
+              <div className="mt-2 text-sm text-red-700">{error}</div>
+              <button
+                onClick={fetchClusters}
+                className="mt-3 text-sm font-medium text-red-800 hover:text-red-900"
+              >
+                Try again
+              </button>
             </div>
           </div>
         </div>
-      </>
+      </div>
     );
   }
 
   if (clusters.length === 0) {
     return (
-      <>
-        <DashboardHeader activePage="clusters" className="mb-8" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-12 bg-purple-50 border border-purple-200 rounded-lg">
-            <h3 className="text-lg font-medium text-purple-900 mb-2">🔍 No clusters found</h3>
-            <p className="mt-2 text-sm text-purple-700 mb-4">
-              We didn&apos;t receive any clusters from the backend. Ensure the ingestion API is
-              running and BACKEND_URL points at it.
-            </p>
-            <p className="text-sm text-purple-700">
-              You can still browse individual feedback in the{' '}
-              <Link href="/feedback" className="font-semibold underline">
-                Feedback tab
-              </Link>
-              .
-            </p>
-          </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="text-center py-12 bg-purple-50 border border-purple-200 rounded-lg">
+          <h3 className="text-lg font-medium text-purple-900 mb-2">🔍 No clusters found</h3>
+          <p className="mt-2 text-sm text-purple-700 mb-4">
+            We didn&apos;t receive any clusters from the backend. Ensure the ingestion API is
+            running and BACKEND_URL points at it.
+          </p>
+          <p className="text-sm text-purple-700">
+            You can still browse individual feedback in the{' '}
+            <Link href="/feedback" className="font-semibold underline">
+              Feedback tab
+            </Link>
+            .
+          </p>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-matrix-black pb-12">
-      <DashboardHeader activePage="clusters" className="mb-8" />
+    <div className="min-h-screen bg-matrix-black pb-12 pt-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-8">
           <div>

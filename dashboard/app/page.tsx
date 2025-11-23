@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import StatsCards from '@/components/StatsCards';
-import FeedbackList from '@/components/FeedbackList';
 
 export default function Home() {
   return (
@@ -63,7 +62,6 @@ export default function Home() {
       {/* Dashboard Grid */}
       <div className="grid gap-6 lg:grid-cols-2 gap-x-6 gap-y-6">
         <StatsCards />
-        <FeedbackList />
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

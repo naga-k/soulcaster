@@ -1,7 +1,9 @@
+'use client';
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-type ActivePage = 'feedback' | 'clusters' | 'home';
+type ActivePage = 'overview' | 'feedback' | 'clusters' | 'prs';
 
 interface DashboardHeaderProps {
   activePage?: ActivePage;
@@ -13,7 +15,7 @@ interface DashboardHeaderProps {
  * Shared header component for dashboard pages with navigation.
  * Highlights the active page in the navigation menu.
  *
- * @param activePage - The currently active page ('feedback', 'clusters', or 'home')
+ * @param activePage - The currently active page
  * @param rightContent - Optional content to render on the right side of the header
  * @param className - Optional additional CSS classes to apply to the outer container
  */
@@ -23,23 +25,10 @@ export default function DashboardHeader({
   activePage,
 }: DashboardHeaderProps) {
   const pathname = usePathname();
-  const getFeedbackLinkClass = () => {
-    const baseClass = 'px-4 py-2 text-sm font-medium rounded-md transition-colors';
-    return activePage === 'feedback'
-      ? `${baseClass} text-netflix-red bg-red-900/20`
-      : `${baseClass} text-gray-400 hover:text-white hover:bg-gray-800`;
-  };
-
-  const getClustersLinkClass = () => {
-    const baseClass = 'px-4 py-2 text-sm font-medium rounded-md transition-colors';
-    return activePage === 'clusters'
-      ? `${baseClass} text-netflix-red bg-red-900/20`
-      : `${baseClass} text-gray-400 hover:text-white hover:bg-gray-800`;
-  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-black/50 backdrop-blur-xl">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex justify-between items-center">
+      <div className="max-w-7xl mx-auto px-4 h-14 flex justify-between items-center">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2.5">
             <div className="flex bg-gradient-to-br from-emerald-400 to-emerald-600 w-6 h-6 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] items-center justify-center">
@@ -53,28 +42,40 @@ export default function DashboardHeader({
           <nav className="hidden sm:flex items-center gap-1">
             <Link
               href="/"
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname === '/'
-                  ? 'bg-white/5 text-emerald-400'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname === '/' || activePage === 'overview'
+                ? 'bg-white/5 text-emerald-400'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 }`}
             >
               Overview
             </Link>
             <Link
+              href="/feedback"
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname.startsWith('/feedback') || activePage === 'feedback'
+                ? 'bg-white/5 text-emerald-400'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                }`}
+            >
+              Feedback
+            </Link>
+            <Link
               href="/clusters"
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname.startsWith('/clusters')
-                  ? 'bg-white/5 text-emerald-400'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname.startsWith('/clusters') || activePage === 'clusters'
+                ? 'bg-white/5 text-emerald-400'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 }`}
             >
               Clusters
             </Link>
-            <a href="#" className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
-              Intelligence
-            </a>
-            <a href="#" className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
-              API
-            </a>
+            <Link
+              href="/prs"
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${pathname.startsWith('/prs') || activePage === 'prs'
+                ? 'bg-white/5 text-emerald-400'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                }`}
+            >
+              PRs
+            </Link>
           </nav>
         </div>
 
