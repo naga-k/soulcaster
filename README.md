@@ -47,7 +47,7 @@ The system consists of three main components:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/soulcaster.git
+git clone https://github.com/altock/soulcaster.git
 cd soulcaster
 ```
 
