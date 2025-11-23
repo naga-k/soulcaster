@@ -17,3 +17,7 @@ Git history currently holds only the “Initial commit,” so adopt Conventional
 
 ## Security & Configuration Tips
 Store secrets only in `.env` (backend) and `.env.local` (dashboard); never commit tokens. Load them with `direnv` or `doppler run` so `GITHUB_TOKEN`, Reddit credentials, and LLM keys stay out of shell history. Point `GITHUB_REPO` at a sandbox repo while testing the coding agent and confirm diffs locally (`git diff`) before letting it open a production PR.
+
+## Data Storage
+Temporary Redis plan (key patterns, ops, Postgres fallback) lives in `documentation/db_design.md`.
+- Global Reddit subreddit list is stored in Redis (`config:reddit:subreddits`) via `/config/reddit/subreddits` and surfaced in the dashboard SourceConfig UI.

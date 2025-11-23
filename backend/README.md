@@ -6,7 +6,7 @@ This is the data ingestion layer for FeedbackAgent, built with FastAPI and follo
 
 - **Multi-source ingestion**: Reddit, Sentry, and manual text feedback
 - **In-memory storage**: Simple dict-based storage for MVP (will be replaced with database)
-- **Reddit polling**: Background service that monitors subreddits for feedback keywords
+- **Reddit polling**: Background service that reads subreddits via Reddit's public JSON feed (no OAuth)
 - **Full test coverage**: Comprehensive test suite with edge cases
 
 ## Project Structure
@@ -47,13 +47,19 @@ uvicorn backend.main:app --reload
 The Reddit poller runs as a separate background process:
 
 ```bash
-# Set environment variables
-export REDDIT_CLIENT_ID="your_client_id"
-export REDDIT_CLIENT_SECRET="your_client_secret"
-export REDDIT_SUBREDDIT="programming"  # or comma-separated list
+# Set environment variables (examples)
+export REDDIT_SUBREDDITS="claudeai"               # keep small list to avoid rate limits
+export REDDIT_SORTS="new,hot,top"                # optional, defaults to "new"
+export REDDIT_POLL_INTERVAL_SECONDS=300          # optional, defaults to 300s
+export BACKEND_URL="http://localhost:8000"       # where to send ingested items
 
-# Run the poller
+# Run the poller (uses Reddit's public JSON endpoints; no OAuth needed)
 python -m backend.reddit_poller
+
+## Enabling Redis (optional, Upstash-friendly)
+- By default the store is in-memory. Set `REDIS_URL` (or `UPSTASH_REDIS_URL`) to enable Redis via redis-py.
+- If you only have the Upstash REST creds, set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; the store will use the REST API.
+- Key patterns and ops are documented in `documentation/db_design.md`.
 ```
 
 ## Running Tests
@@ -111,14 +117,20 @@ Ingest manually submitted text feedback.
 }
 ```
 
+### Reddit Config
+- **GET** `/config/reddit/subreddits` - Returns active subreddit list (Redis-backed; falls back to env/default).
+- **POST** `/config/reddit/subreddits` - Set subreddit list globally. Body: `{"subreddits": ["claudeai", "yoursub"]}`
+
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `REDDIT_CLIENT_ID` | Reddit API client ID | Required for poller |
-| `REDDIT_CLIENT_SECRET` | Reddit API client secret | Required for poller |
-| `REDDIT_SUBREDDIT` | Subreddit(s) to monitor | `"all"` |
+| `REDDIT_SUBREDDITS` | Subreddit(s) to monitor (comma-separated). `REDDIT_SUBREDDIT` is also supported for backward compatibility. | `"all"` |
+| `REDDIT_SORTS` | Listing sorts to pull (`new`, `hot`, `top`) | `"new"` |
+| `REDDIT_POLL_INTERVAL_SECONDS` | How often to poll Reddit | `300` |
 | `BACKEND_URL` | URL of the ingestion API | `http://localhost:8000` |
+| `REDIS_URL` / `UPSTASH_REDIS_URL` | Redis connection string (enables Redis store) | _unset (in-memory)_ |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Upstash REST credentials (used if Redis URL is not set) | _unset (in-memory)_ |
 
 ## Development Notes
 

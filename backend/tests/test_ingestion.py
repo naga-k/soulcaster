@@ -1,11 +1,12 @@
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.store import clear_feedback_items, get_all_feedback_items
+from backend.store import clear_feedback_items, get_all_feedback_items, clear_clusters, get_all_clusters
 
 client = TestClient(app)
 
 def setup_function():
     clear_feedback_items()
+    clear_clusters()
 
 def test_ingest_reddit():
     payload = {
@@ -25,6 +26,9 @@ def test_ingest_reddit():
     assert len(items) == 1
     assert items[0].title == "Bug in the system"
     assert items[0].source == "reddit"
+    clusters = get_all_clusters()
+    assert len(clusters) == 1
+    assert clusters[0].title == "Reddit: r/test"
 
 def test_ingest_sentry():
     # Minimal Sentry webhook payload

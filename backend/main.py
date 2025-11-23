@@ -6,26 +6,26 @@ This module provides HTTP endpoints for ingesting feedback from multiple sources
 - Manual text submissions
 """
 
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .models import FeedbackItem
-from .store import (
-    add_feedback_item,
-    get_feedback_item,
-    get_all_feedback_items,
 from .models import FeedbackItem, IssueCluster
 from .store import (
     add_cluster,
     add_feedback_item,
     get_all_clusters,
-    get_feedback_item,
+    get_all_feedback_items,
     get_cluster,
+    get_feedback_item,
+    clear_clusters,
+    set_reddit_subreddits,
+    get_reddit_subreddits,
     update_cluster,
 )
 
@@ -68,6 +68,7 @@ def ingest_reddit(item: FeedbackItem):
         Status response indicating success
     """
     add_feedback_item(item)
+    _auto_cluster_feedback(item)
     return {"status": "ok", "id": str(item.id)}
 
 
@@ -111,6 +112,7 @@ def ingest_sentry(payload: dict):
             created_at=datetime.now(timezone.utc),
         )
         add_feedback_item(item)
+        _auto_cluster_feedback(item)
         return {"status": "ok", "id": str(item.id)}
 
     except Exception as e:
@@ -123,6 +125,12 @@ class ManualIngestRequest(BaseModel):
     """Request model for manual feedback submission."""
 
     text: str
+
+
+class SubredditConfig(BaseModel):
+    """Payload for configuring Reddit subreddits."""
+
+    subreddits: List[str]
 
 
 @app.post("/ingest/manual")
@@ -147,7 +155,102 @@ def ingest_manual(request: ManualIngestRequest):
         created_at=datetime.now(timezone.utc),
     )
     add_feedback_item(item)
+    _auto_cluster_feedback(item)
     return {"status": "ok", "id": str(item.id)}
+
+
+# Reddit config endpoints (global, no per-user)
+
+
+def _sanitize_subreddits(values: List[str]) -> List[str]:
+    cleaned = []
+    for value in values:
+        slug = value.strip()
+        if not slug:
+            continue
+        cleaned.append(slug.lower())
+    # Preserve order, remove duplicates
+    seen = set()
+    deduped = []
+    for sub in cleaned:
+        if sub not in seen:
+            seen.add(sub)
+            deduped.append(sub)
+    return deduped
+
+
+@app.get("/config/reddit/subreddits")
+def get_reddit_config():
+    """Return the active subreddit list (store-backed or env fallback)."""
+    configured = get_reddit_subreddits()
+    if configured:
+        return {"subreddits": configured}
+
+    # Fallback to env defaults
+    env_value = os.getenv("REDDIT_SUBREDDITS") or os.getenv("REDDIT_SUBREDDIT")
+    if env_value:
+        return {"subreddits": _sanitize_subreddits(env_value.split(","))}
+    return {"subreddits": ["claudeai"]}
+
+
+@app.post("/config/reddit/subreddits")
+def set_reddit_config(payload: SubredditConfig):
+    """Set the subreddit list used by the poller (global)."""
+    cleaned = _sanitize_subreddits(payload.subreddits)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="At least one subreddit is required.")
+    set_reddit_subreddits(cleaned)
+    return {"subreddits": cleaned}
+
+
+# Simple clustering: group by source (and subreddit for Reddit)
+def _auto_cluster_feedback(item: FeedbackItem) -> IssueCluster:
+    now = datetime.now(timezone.utc)
+    subreddit = None
+    if isinstance(item.metadata, dict):
+        subreddit = item.metadata.get("subreddit")
+
+    if item.source == "reddit":
+        cluster_title = f"Reddit: r/{subreddit}" if subreddit else "Reddit feedback"
+        cluster_summary = (
+            f"Reports from r/{subreddit}" if subreddit else "Feedback from Reddit submissions"
+        )
+    elif item.source == "sentry":
+        cluster_title = "Sentry issues"
+        cluster_summary = "Error reports ingested from Sentry webhooks"
+    else:
+        cluster_title = "Manual feedback"
+        cluster_summary = "User-submitted manual feedback"
+
+    # Try to find an existing cluster with the same title
+    existing = None
+    for cluster in get_all_clusters():
+        if cluster.title == cluster_title:
+            existing = cluster
+            break
+
+    if existing:
+        if item.id not in existing.feedback_ids:
+            updated_ids = existing.feedback_ids + [item.id]
+            return update_cluster(
+                existing.id,
+                feedback_ids=updated_ids,
+                updated_at=now,
+            )
+        return existing
+
+    # Create new cluster
+    cluster = IssueCluster(
+        id=uuid4(),
+        title=cluster_title,
+        summary=cluster_summary,
+        feedback_ids=[item.id],
+        status="new",
+        created_at=now,
+        updated_at=now,
+    )
+    add_cluster(cluster)
+    return cluster
 
 
 # Feedback Retrieval Endpoints
@@ -235,35 +338,15 @@ def get_stats():
         if item.source in by_source:
             by_source[item.source] += 1
 
+    total_clusters = len(get_all_clusters())
+
     return {
         "total_feedback": total,
         "by_source": by_source,
-        "total_clusters": 0,  # Placeholder for clustering feature
+        "total_clusters": total_clusters,
     }
 
 
-@app.get("/clusters")
-def get_clusters():
-    """
-    Get all issue clusters.
-
-    Returns a list of all clusters with their metadata. Currently returns
-    an empty list as clustering logic is not yet implemented.
-
-    Returns:
-        Dictionary with:
-        - clusters: List of cluster dictionaries, each containing id, title,
-          summary, count, status, sources, and optional github_pr_url
-        - total: Total number of clusters (computed as len(clusters))
-    """
-    # TODO: Implement clustering logic
-    # For now, return empty list with proper structure
-    clusters = []
-    total = len(clusters)
-    return {
-        "clusters": clusters,
-        "total": total,
-    }
 @app.get("/clusters")
 def list_clusters():
     """List all issue clusters with aggregated metadata."""

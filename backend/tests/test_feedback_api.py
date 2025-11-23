@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.store import clear_feedback_items, add_feedback_item
+from backend.store import clear_feedback_items, add_feedback_item, clear_clusters
 from backend.models import FeedbackItem
 
 client = TestClient(app)
@@ -14,6 +14,7 @@ client = TestClient(app)
 def setup_function():
     """Clear store before each test."""
     clear_feedback_items()
+    clear_clusters()
 
 
 def test_get_feedback_empty():

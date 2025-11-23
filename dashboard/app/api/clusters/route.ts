@@ -20,9 +20,17 @@ export async function GET() {
     }
 
     const data = await response.json();
-    // Backend returns { clusters: [], total: 0 }
-    // Frontend expects array directly for now
-    return NextResponse.json(data.clusters || []);
+
+    // Accept both list-style responses and object-wrapped payloads
+    if (Array.isArray(data)) {
+      return NextResponse.json(data);
+    }
+    if (Array.isArray(data?.clusters)) {
+      return NextResponse.json(data.clusters);
+    }
+
+    console.warn('Unexpected clusters response shape', data);
+    return NextResponse.json([]);
   } catch (error) {
     console.error('Error fetching clusters:', error);
     return NextResponse.json(

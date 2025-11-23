@@ -34,6 +34,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - PyGithub for GitHub integration
 - LiteLLM (optional) for model abstraction
 - In-memory storage: `feedback_items` and `issue_clusters` dicts
+- Hackathon persistence: Redis plan documented in `documentation/db_design.md` (key patterns + Postgres fallback)
+- Reddit config (subreddits) stored in Redis via `/config/reddit/subreddits` (dashboard UI writes/reads this list)
 
 **Frontend (Next.js)**
 - App Router on Vercel
