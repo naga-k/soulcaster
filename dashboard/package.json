@@ -9,7 +9,8 @@
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "clustering:reset": "node scripts/reset_clusters.js"
   },
   "dependencies": {
     "@aws-sdk/client-ecs": "^3.937.0",

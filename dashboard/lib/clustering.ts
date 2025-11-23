@@ -144,6 +144,70 @@ export interface ClusterData {
   centroid: number[];
 }
 
+export interface ClusterSummaryResult {
+  title: string;
+  summary: string;
+  issueTitle: string;
+  issueDescription: string;
+  repoUrl?: string;
+}
+
+function normalizeRepoUrl(value?: string | null): string | null {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const repoMatch = trimmed.match(/github\.com\/([\w.-]+)\/([\w.-]+)/i);
+  if (repoMatch) {
+    const owner = repoMatch[1];
+    const repo = repoMatch[2].replace(/\.git$/i, '');
+    return `https://github.com/${owner}/${repo}`;
+  }
+
+  if (/^[\w.-]+\/[\w.-]+(\.git)?$/.test(trimmed)) {
+    return `https://github.com/${trimmed.replace(/\.git$/i, '')}`;
+  }
+
+  return null;
+}
+
+function extractRepoHints(feedbackItems: FeedbackItem[]): string[] {
+  const hints = new Set<string>();
+  for (const item of feedbackItems) {
+    const direct = normalizeRepoUrl(item.github_repo_url || (item.metadata?.github_repo_url as string));
+    if (direct) hints.add(direct);
+
+    const metadataRepo = typeof item.metadata?.repo_url === 'string' ? normalizeRepoUrl(item.metadata.repo_url) : null;
+    if (metadataRepo) hints.add(metadataRepo);
+
+    const bodyMatches = item.body.matchAll(/github\.com\/([\w.-]+)\/([\w.-]+)/gi);
+    for (const match of bodyMatches) {
+      const normalized = normalizeRepoUrl(`https://github.com/${match[1]}/${match[2]}`);
+      if (normalized) hints.add(normalized);
+    }
+  }
+  return Array.from(hints);
+}
+
+function buildFallbackSummary(feedbackItems: FeedbackItem[], repoHints: string[]): ClusterSummaryResult {
+  const titles = feedbackItems.map((item) => item.title || 'Untitled');
+  const summaryText = feedbackItems
+    .map((item) => `• ${item.title}: ${item.body.substring(0, 140)}`)
+    .slice(0, 4)
+    .join('\n');
+
+  const fallbackTitle = titles[0]?.substring(0, 50) || 'Cluster Summary';
+  const fallbackSummary = `${feedbackItems.length} reports. First: ${feedbackItems[0]?.body.substring(0, 140) || ''}`;
+
+  return {
+    title: fallbackTitle,
+    summary: fallbackSummary,
+    issueTitle: fallbackTitle,
+    issueDescription: summaryText || fallbackSummary,
+    repoUrl: repoHints[0],
+  };
+}
+
 /**
  * Cluster a single feedback item against existing clusters
  * Returns which cluster it should belong to (or if it should create a new one)
@@ -315,70 +379,80 @@ export async function clusterFeedbackBatch(
  */
 export async function generateClusterSummary(
   feedbackItems: FeedbackItem[]
-): Promise<{ title: string; summary: string }> {
+): Promise<ClusterSummaryResult> {
   if (feedbackItems.length === 0) {
-    return { title: 'Empty cluster', summary: 'No feedback items' };
+    return {
+      title: 'Empty cluster',
+      summary: 'No feedback items',
+      issueTitle: 'Empty cluster',
+      issueDescription: 'No feedback items were provided to summarize.',
+    };
   }
+
+  const repoHints = extractRepoHints(feedbackItems);
 
   const feedbackTexts = feedbackItems
     .map((item) => {
       const title = item.title || 'No Title';
       const body = item.body || '';
-      return `- ${title}: ${body.substring(0, 200)}`;
+      return `- ${title}: ${body.substring(0, 400)}`;
     })
     .join('\n');
 
+  const repoSection = repoHints.length
+    ? `\nRepository hints (if relevant): ${repoHints.join(', ')}`
+    : '';
+
   const prompt = `
-    Analyze the following user feedback items and generate a concise title and a summary.
-    
-    Feedback Items:
-    ${feedbackTexts}
-    
-    Output format (JSON):
-    {
-      "title": "Short descriptive title (max 50 chars)",
-      "summary": "Concise summary of the common issue or theme (max 300 chars)"
-    }
-  `;
+You are helping triage product feedback into engineering-ready work items.
+Given these feedback excerpts, produce a JSON object with the following shape:
+{
+  "cluster_title": "Friendly name for the cluster (<=50 chars)",
+  "cluster_description": "High-level summary focused on user impact (<=300 chars)",
+  "issue_title": "GitHub-appropriate issue title (<=72 chars)",
+  "issue_description": "Markdown body that explains impact, evidence, and acceptance hints (<=1200 chars)",
+  "repo_url": "https://github.com/owner/repo value if you can infer it, otherwise null"
+}
+
+Feedback Items:
+${feedbackTexts}
+${repoSection}
+
+Return ONLY valid JSON.
+`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: [{
-        role: 'user',
-        parts: [{ text: prompt }]
-      }],
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }],
+        },
+      ],
       config: {
         responseMimeType: 'application/json',
-      }
+      },
     });
 
-    // In @google/genai, response.text is a getter/property, not a function?
-    // The error said: "Type 'String' has no call signatures." implying response.text IS a string (or String object).
-    // So we should access it directly.
-    const text = response.text;
+    const text = typeof response.text === 'string' ? response.text : '';
 
     if (!text) {
       throw new Error('Empty response from Gemini');
     }
 
-    // Clean up markdown code blocks if present (though responseMimeType should handle it mostly)
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonStr = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     const data = JSON.parse(jsonStr);
 
     return {
-      title: data.title || 'Cluster Summary',
-      summary: data.summary || 'No summary available',
+      title: data.cluster_title || data.title || 'Cluster Summary',
+      summary: data.cluster_description || data.summary || 'No summary available',
+      issueTitle: data.issue_title || data.cluster_title || 'Cluster Issue',
+      issueDescription: data.issue_description || data.cluster_description || data.summary || 'No summary available',
+      repoUrl: normalizeRepoUrl(data.repo_url) || repoHints[0],
     };
   } catch (error) {
     console.error('[Clustering] Error generating summary with Gemini:', error);
-
-    // Fallback to simple heuristic
-    const titles = feedbackItems.map((item) => item.title || 'No Title');
-    const firstBody = feedbackItems[0]?.body || '';
-    return {
-      title: titles[0].substring(0, 50),
-      summary: `${feedbackItems.length} reports. First: ${firstBody.substring(0, 100)}...`,
-    };
+    return buildFallbackSummary(feedbackItems, repoHints);
   }
 }

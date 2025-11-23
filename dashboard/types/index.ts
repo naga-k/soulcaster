@@ -46,6 +46,9 @@ export interface IssueCluster {
   github_branch?: string;
   github_pr_url?: string;
   error_message?: string;
+  issue_title?: string;
+  issue_description?: string;
+  github_repo_url?: string;
 }
 
 export interface ClusterListItem {
@@ -56,6 +59,9 @@ export interface ClusterListItem {
   status: ClusterStatus;
   sources: FeedbackSource[];
   github_pr_url?: string;
+  issue_title?: string;
+  issue_description?: string;
+  github_repo_url?: string;
 }
 
 export interface ClusterDetail extends IssueCluster {

@@ -264,8 +264,15 @@ export default function ClustersListPage() {
                   ) : (
                     clusters.map((cluster) => (
                       <tr key={cluster.id} className="group transition-colors hover:bg-white/5">
-                        <td className="px-6 py-4 font-medium text-slate-200 group-hover:text-emerald-300 transition-colors">
-                          {cluster.title || 'Untitled Cluster'}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-slate-200 group-hover:text-emerald-300 transition-colors">
+                              {cluster.issue_title || cluster.title || 'Untitled Cluster'}
+                            </span>
+                            <span className="text-xs text-slate-500 line-clamp-2">
+                              {cluster.issue_description || cluster.summary}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border ${cluster.status === 'new' || cluster.status === 'pr_opened' || cluster.status === 'fixing'

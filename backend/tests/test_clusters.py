@@ -48,10 +48,10 @@ def _seed_cluster_with_feedback():
         add_feedback_item(item)
 
     cluster = IssueCluster(
-        id=uuid4(),
+        id=str(uuid4()),
         title="Export issues",
         summary="Crashes and type errors during export flow",
-        feedback_ids=[feedback_one.id, feedback_two.id],
+        feedback_ids=[str(feedback_one.id), str(feedback_two.id)],
         status="new",
         created_at=now,
         updated_at=now,
@@ -110,7 +110,7 @@ def test_start_fix_updates_cluster_status():
 def test_cluster_fields_include_github_metadata():
     now = datetime.now(timezone.utc)
     cluster = IssueCluster(
-        id=uuid4(),
+        id=str(uuid4()),
         title="GitHub PR Cluster",
         summary="Cluster with PR",
         feedback_ids=[],
@@ -118,7 +118,10 @@ def test_cluster_fields_include_github_metadata():
         created_at=now,
         updated_at=now,
         github_pr_url="https://github.com/owner/repo/pull/123",
-        github_branch="fix-issue-123"
+        github_branch="fix-issue-123",
+        issue_title="Generated Issue Title",
+        issue_description="Generated issue description for engineers.",
+        github_repo_url="https://github.com/owner/repo",
     )
     add_cluster(cluster)
 
@@ -128,6 +131,9 @@ def test_cluster_fields_include_github_metadata():
     data = response.json()
     assert len(data) == 1
     assert data[0]["github_pr_url"] == "https://github.com/owner/repo/pull/123"
+    assert data[0]["issue_title"] == "Generated Issue Title"
+    assert data[0]["issue_description"].startswith("Generated issue description")
+    assert data[0]["github_repo_url"] == "https://github.com/owner/repo"
 
     # Check detail endpoint
     response = client.get(f"/clusters/{cluster.id}")
@@ -135,3 +141,5 @@ def test_cluster_fields_include_github_metadata():
     data = response.json()
     assert data["github_pr_url"] == "https://github.com/owner/repo/pull/123"
     assert data["github_branch"] == "fix-issue-123"
+    assert data["issue_title"] == "Generated Issue Title"
+    assert data["github_repo_url"] == "https://github.com/owner/repo"

@@ -37,6 +37,9 @@ async function getClusterHash(id: string): Promise<IssueCluster | null> {
     github_branch: data.github_branch as string | undefined,
     github_pr_url: data.github_pr_url as string | undefined,
     error_message: data.error_message as string | undefined,
+    issue_title: data.issue_title as string | undefined,
+    issue_description: data.issue_description as string | undefined,
+    github_repo_url: data.github_repo_url as string | undefined,
   };
 }
 
@@ -110,6 +113,9 @@ export async function getClusters(): Promise<ClusterListItem[]> {
         sources: sources as ('reddit' | 'sentry' | 'manual')[],
         created_at: cluster.created_at,
         ...(cluster.github_pr_url && { github_pr_url: cluster.github_pr_url }),
+        ...(cluster.issue_title && { issue_title: cluster.issue_title }),
+        ...(cluster.issue_description && { issue_description: cluster.issue_description }),
+        ...(cluster.github_repo_url && { github_repo_url: cluster.github_repo_url }),
       };
       return item;
     })
