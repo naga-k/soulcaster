@@ -121,7 +121,10 @@ export async function POST() {
       // Update cluster items set
       await redis.del(`cluster:items:${cluster.id}`);
       if (cluster.feedbackIds.length > 0) {
-        await redis.sadd(`cluster:items:${cluster.id}`, ...cluster.feedbackIds);
+        // Add items one by one to avoid TypeScript spread issues
+        for (const feedbackId of cluster.feedbackIds) {
+          await redis.sadd(`cluster:items:${cluster.id}`, feedbackId);
+        }
       }
 
       // Mark feedback as clustered
@@ -132,7 +135,10 @@ export async function POST() {
 
     // Remove items from unclustered set
     if (unclusteredIds.length > 0) {
-      await redis.srem('feedback:unclustered', ...unclusteredIds);
+      // Remove items one by one to avoid TypeScript spread issues
+      for (const id of unclusteredIds) {
+        await redis.srem('feedback:unclustered', id);
+      }
     }
 
     console.log('[Clustering] Clustering complete');
