@@ -21,7 +21,8 @@ export async function POST(request: Request) {
             bodyKeys: Object.keys(body)
         });
         let { issue_url } = body;
-        const { context, issue_title, repo: paramRepo, owner: paramOwner, repo_url } = body;
+        const { context, issue_title, issue_description, repo: paramRepo, owner: paramOwner, repo_url } = body;
+        const issueBody = issue_description || context;
 
         // Verify issue_url if provided
         if (issue_url && githubToken) {
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
         // If no issue_url provided, try to create one from context
         if (!issue_url) {
-            if (context && githubToken) {
+            if (issueBody && githubToken) {
                 try {
                     const octokit = new Octokit({ auth: githubToken });
                     let owner = paramOwner || process.env.GITHUB_OWNER;
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
                         owner,
                         repo,
                         title: title.substring(0, 256), // GitHub title limit
-                        body: context,
+                        body: issueBody || `Fix requested for cluster at ${new Date().toISOString()}`,
                     });
 
                     issue_url = newIssue.data.html_url;
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
                 return NextResponse.json(
                     {
                         error: 'Configuration Error',
-                        details: 'Missing issue_url. To create an issue automatically, provide (context + repo_url/owner+repo) AND ensure GITHUB_TOKEN is set in dashboard/.env'
+                        details: 'Missing issue_url. To create an issue automatically, provide issue_description (or context) plus repo_url/owner+repo and ensure GITHUB_TOKEN is set in dashboard/.env'
                     },
                     { status: 400 }
                 );

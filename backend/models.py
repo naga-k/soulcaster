@@ -61,3 +61,6 @@ class IssueCluster(BaseModel):
     github_branch: Optional[str] = None
     github_pr_url: Optional[str] = None
     error_message: Optional[str] = None
+    issue_title: Optional[str] = None
+    issue_description: Optional[str] = None
+    github_repo_url: Optional[str] = None

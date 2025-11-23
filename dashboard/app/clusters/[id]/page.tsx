@@ -182,13 +182,20 @@ export default function ClusterDetailPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-4">
                   <h1 className="text-2xl font-bold text-white tracking-tight">
-                    {cluster.title || 'Untitled Cluster'}
+                    {cluster.issue_title || cluster.title || 'Untitled Cluster'}
                   </h1>
                   <span className={getStatusBadgeClass(cluster.status)}>
                     {cluster.status.replace('_', ' ')}
                   </span>
                 </div>
-                <p className="text-gray-400 text-lg leading-relaxed">{cluster.summary}</p>
+                <p className="text-gray-400 text-lg leading-relaxed">
+                  {cluster.issue_description || cluster.summary}
+                </p>
+                {cluster.issue_description && cluster.summary && cluster.issue_description !== cluster.summary && (
+                  <p className="text-gray-500 text-sm leading-relaxed mt-3">
+                    Cluster summary: {cluster.summary}
+                  </p>
+                )}
               </div>
               <div className="ml-6 flex flex-col gap-3">
                 {cluster.github_pr_url && (
@@ -232,6 +239,21 @@ export default function ClusterDetailPage() {
                   ))}
                 </dd>
               </div>
+              {cluster.github_repo_url && (
+                <div>
+                  <dt className="text-xs font-bold text-matrix-green uppercase tracking-wider mb-1">Target Repo</dt>
+                  <dd>
+                    <a
+                      href={cluster.github_repo_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-400 hover:text-emerald-300 break-all"
+                    >
+                      {cluster.github_repo_url}
+                    </a>
+                  </dd>
+                </div>
+              )}
               {Object.keys(repoCounts).length > 0 && (
                 <div>
                   <dt className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">Repositories</dt>

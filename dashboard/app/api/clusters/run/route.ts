@@ -88,7 +88,9 @@ export async function POST() {
       );
 
       // Generate summary
-      const { title, summary } = await generateClusterSummary(validClusterFeedback);
+      const { title, summary, issueTitle, issueDescription, repoUrl } = await generateClusterSummary(
+        validClusterFeedback
+      );
 
       const timestamp = new Date().toISOString();
 
@@ -97,7 +99,7 @@ export async function POST() {
 
       if (isNew) {
         // Create new cluster
-        await redis.hset(`cluster:${cluster.id}`, {
+        const payload: Record<string, string> = {
           id: cluster.id,
           title,
           summary,
@@ -105,16 +107,26 @@ export async function POST() {
           created_at: timestamp,
           updated_at: timestamp,
           centroid: JSON.stringify(cluster.centroid),
-        });
+        };
+        if (issueTitle) payload.issue_title = issueTitle;
+        if (issueDescription) payload.issue_description = issueDescription;
+        if (repoUrl) payload.github_repo_url = repoUrl;
+
+        await redis.hset(`cluster:${cluster.id}`, payload);
         // Add to clusters:all set to avoid using KEYS command
         await redis.sadd('clusters:all', cluster.id);
       } else {
         // Update existing cluster
-        await redis.hset(`cluster:${cluster.id}`, {
-          summary, // Update summary with new items
+        const updatePayload: Record<string, string> = {
+          summary,
           updated_at: timestamp,
           centroid: JSON.stringify(cluster.centroid),
-        });
+        };
+        if (issueTitle) updatePayload.issue_title = issueTitle;
+        if (issueDescription) updatePayload.issue_description = issueDescription;
+        if (repoUrl) updatePayload.github_repo_url = repoUrl;
+
+        await redis.hset(`cluster:${cluster.id}`, updatePayload);
       }
 
       // Update cluster items set

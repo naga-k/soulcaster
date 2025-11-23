@@ -118,7 +118,10 @@ def test_cluster_fields_include_github_metadata():
         created_at=now,
         updated_at=now,
         github_pr_url="https://github.com/owner/repo/pull/123",
-        github_branch="fix-issue-123"
+        github_branch="fix-issue-123",
+        issue_title="Generated Issue Title",
+        issue_description="Generated issue description for engineers.",
+        github_repo_url="https://github.com/owner/repo",
     )
     add_cluster(cluster)
 
@@ -128,6 +131,9 @@ def test_cluster_fields_include_github_metadata():
     data = response.json()
     assert len(data) == 1
     assert data[0]["github_pr_url"] == "https://github.com/owner/repo/pull/123"
+    assert data[0]["issue_title"] == "Generated Issue Title"
+    assert data[0]["issue_description"].startswith("Generated issue description")
+    assert data[0]["github_repo_url"] == "https://github.com/owner/repo"
 
     # Check detail endpoint
     response = client.get(f"/clusters/{cluster.id}")
@@ -135,3 +141,5 @@ def test_cluster_fields_include_github_metadata():
     data = response.json()
     assert data["github_pr_url"] == "https://github.com/owner/repo/pull/123"
     assert data["github_branch"] == "fix-issue-123"
+    assert data["issue_title"] == "Generated Issue Title"
+    assert data["github_repo_url"] == "https://github.com/owner/repo"

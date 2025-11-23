@@ -447,6 +447,9 @@ def list_clusters():
                 "status": cluster.status,
                 "sources": sources,
                 "github_pr_url": cluster.github_pr_url,
+                "issue_title": cluster.issue_title,
+                "issue_description": cluster.issue_description,
+                "github_repo_url": cluster.github_repo_url,
             }
         )
     return results
