@@ -178,6 +178,9 @@ export async function clusterFeedbackBatch(
     // Assign to cluster or create new one
     if (maxSimilarity >= similarityThreshold && bestClusterIndex !== null) {
       const cluster = clusters[bestClusterIndex];
+      console.log(
+        `[Clustering] Adding feedback ${feedbackId} to existing cluster ${cluster.id} (similarity: ${maxSimilarity.toFixed(3)})`
+      );
       cluster.feedbackIds.push(feedbackId);
 
       // Update centroid
@@ -194,6 +197,9 @@ export async function clusterFeedbackBatch(
       });
     } else {
       // Create new cluster
+      console.log(
+        `[Clustering] Creating new cluster for feedback ${feedbackId} (max similarity: ${maxSimilarity.toFixed(3)}, threshold: ${similarityThreshold})`
+      );
       const clusterId = `cluster-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       clusters.push({
         id: clusterId,

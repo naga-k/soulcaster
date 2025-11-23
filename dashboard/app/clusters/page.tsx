@@ -21,9 +21,21 @@ export default function ClustersListPage() {
   const [isClustering, setIsClustering] = useState(false);
 
   useEffect(() => {
-    fetchClusters();
-    fetchUnclusteredCount();
+    loadClustersAndAutoCluster();
   }, []);
+
+  const loadClustersAndAutoCluster = async () => {
+    // First fetch existing clusters
+    await fetchClusters();
+
+    // Check if there are unclustered items
+    const count = await fetchUnclusteredCount();
+
+    // Auto-run clustering if there are unclustered items (silent mode)
+    if (count > 0) {
+      await runClustering(true);
+    }
+  };
 
   const fetchClusters = async () => {
     try {
@@ -42,19 +54,21 @@ export default function ClustersListPage() {
     }
   };
 
-  const fetchUnclusteredCount = async () => {
+  const fetchUnclusteredCount = async (): Promise<number> => {
     try {
       const response = await fetch('/api/clusters/unclustered');
       if (response.ok) {
         const data = await response.json();
         setUnclusteredCount(data.count);
+        return data.count;
       }
     } catch (err) {
       console.error('Failed to fetch unclustered count:', err);
     }
+    return 0;
   };
 
-  const handleRunClustering = async () => {
+  const runClustering = async (silent: boolean = false) => {
     try {
       setIsClustering(true);
       const response = await fetch('/api/clusters/run', {
@@ -71,18 +85,30 @@ export default function ClustersListPage() {
       await fetchClusters();
       await fetchUnclusteredCount();
 
-      // Show success message
-      alert(
-        `Clustering complete!\n` +
-          `- Processed: ${result.clustered} items\n` +
-          `- New clusters: ${result.newClusters}\n` +
-          `- Updated clusters: ${result.updatedClusters || 0}`
-      );
+      // Show success message only if not silent (manual trigger)
+      if (!silent) {
+        alert(
+          `Clustering complete!\n` +
+            `- Processed: ${result.clustered} items\n` +
+            `- New clusters: ${result.newClusters}\n` +
+            `- Updated clusters: ${result.updatedClusters || 0}`
+        );
+      }
     } catch (err) {
-      alert('Failed to run clustering: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      if (!silent) {
+        alert(
+          'Failed to run clustering: ' + (err instanceof Error ? err.message : 'Unknown error')
+        );
+      } else {
+        console.error('Auto-clustering failed:', err);
+      }
     } finally {
       setIsClustering(false);
     }
+  };
+
+  const handleRunClustering = async () => {
+    await runClustering(false);
   };
 
   const getStatusBadgeClass = (status: ClusterListItem['status']) => {
