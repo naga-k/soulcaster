@@ -64,11 +64,12 @@ export async function POST() {
 
     console.log(`[Clustering] Processing against ${existingClusters.length} existing clusters`);
 
-    // Run clustering
+    // Run clustering with lower threshold for more aggressive grouping
+    // 0.65 allows items with 65% similarity to cluster together
     const { results, updatedClusters } = await clusterFeedbackBatch(
       validFeedback,
       existingClusters,
-      0.8 // similarity threshold
+      0.65 // similarity threshold (lower = more aggressive clustering)
     );
 
     // Track new clusters created
