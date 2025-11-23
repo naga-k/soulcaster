@@ -12,7 +12,10 @@ from uuid import UUID
 
 import requests
 
-from .models import FeedbackItem, IssueCluster
+try:
+    from .models import FeedbackItem, IssueCluster
+except ImportError:
+    from models import FeedbackItem, IssueCluster
 
 try:
     import redis  # type: ignore

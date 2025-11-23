@@ -15,19 +15,34 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .models import FeedbackItem, IssueCluster
-from .store import (
-    add_cluster,
-    add_feedback_item,
-    get_all_clusters,
-    get_all_feedback_items,
-    get_cluster,
-    get_feedback_item,
-    clear_clusters,
-    set_reddit_subreddits,
-    get_reddit_subreddits,
-    update_cluster,
-)
+try:
+    from .models import FeedbackItem, IssueCluster
+    from .store import (
+        add_cluster,
+        add_feedback_item,
+        get_all_clusters,
+        get_all_feedback_items,
+        get_cluster,
+        get_feedback_item,
+        clear_clusters,
+        set_reddit_subreddits,
+        get_reddit_subreddits,
+        update_cluster,
+    )
+except ImportError:
+    from models import FeedbackItem, IssueCluster
+    from store import (
+        add_cluster,
+        add_feedback_item,
+        get_all_clusters,
+        get_all_feedback_items,
+        get_cluster,
+        get_feedback_item,
+        clear_clusters,
+        set_reddit_subreddits,
+        get_reddit_subreddits,
+        update_cluster,
+    )
 
 app = FastAPI(
     title="FeedbackAgent Ingestion API",

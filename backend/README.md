@@ -36,7 +36,8 @@ pip install -r requirements.txt
 
 ```bash
 # Start the FastAPI server
-uvicorn backend.main:app --reload
+cd backend
+uvicorn main:app --reload
 
 # Server will be available at http://localhost:8000
 # API docs at http://localhost:8000/docs

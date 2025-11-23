@@ -15,6 +15,11 @@ import requests
 
 try:
     from .store import get_reddit_subreddits as _store_get_reddit_subreddits
+except ImportError:
+    try:
+        from store import get_reddit_subreddits as _store_get_reddit_subreddits
+    except ImportError:
+        _store_get_reddit_subreddits = None
 except Exception:
     _store_get_reddit_subreddits = None
 
