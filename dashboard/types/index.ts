@@ -63,6 +63,7 @@ export interface ClusterListItem {
   count: number;
   status: ClusterStatus;
   sources: FeedbackSource[];
+  repos?: string[]; // Array of "owner/repo" strings for GitHub repos
   github_pr_url?: string;
 }
 

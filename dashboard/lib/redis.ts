@@ -106,6 +106,9 @@ export async function getClusters(): Promise<ClusterListItem[]> {
 
       const validItems = feedbackItems.filter((item): item is FeedbackItem => item !== null);
       const sources = Array.from(new Set(validItems.map((item) => item.source)));
+      const repos = Array.from(
+        new Set(validItems.map((item) => item.repo).filter((repo): repo is string => !!repo))
+      );
 
       const item: ClusterListItem & { created_at: string } = {
         id: cluster.id,
@@ -114,6 +117,7 @@ export async function getClusters(): Promise<ClusterListItem[]> {
         count: feedbackIds.length,
         status: cluster.status,
         sources: sources as ('reddit' | 'sentry' | 'manual')[],
+        repos: repos.length > 0 ? repos : undefined,
         created_at: cluster.created_at,
         ...(cluster.github_pr_url && { github_pr_url: cluster.github_pr_url }),
       };
@@ -155,12 +159,13 @@ export async function getClusterDetail(id: string): Promise<ClusterDetail | null
 }
 
 /**
- * Get feedback items with pagination and optional source filter
+ * Get feedback items with pagination and optional source/repo filters
  */
 export async function getFeedback(
   limit: number = 100,
   offset: number = 0,
-  source?: string
+  source?: string,
+  repo?: string
 ): Promise<{ items: FeedbackItem[]; total: number; limit: number; offset: number }> {
   let feedbackIds: string[];
 
@@ -174,13 +179,31 @@ export async function getFeedback(
     feedbackIds = allIds as string[];
   }
 
+  // Apply repo filter if specified
+  if (repo) {
+    // Fetch all items and filter by repo
+    const allItems = await Promise.all(feedbackIds.map((id) => getFeedbackItem(id)));
+    const filteredItems = allItems.filter(
+      (item): item is FeedbackItem => item !== null && item.repo === repo
+    );
+    const filteredIds = filteredItems.map((item) => item.id);
+    feedbackIds = filteredIds;
+  }
+
   const total = feedbackIds.length;
 
   // Apply pagination
   const paginatedIds = feedbackIds.slice(offset, offset + limit);
 
-  // Fetch the actual feedback items
-  const items = await Promise.all(paginatedIds.map((id) => getFeedbackItem(id)));
+  // Fetch the actual feedback items (if not already fetched for repo filtering)
+  let items: (FeedbackItem | null)[];
+  if (repo) {
+    // Already fetched during repo filtering, just paginate
+    const allItems = await Promise.all(feedbackIds.map((id) => getFeedbackItem(id)));
+    items = allItems.slice(0, limit);
+  } else {
+    items = await Promise.all(paginatedIds.map((id) => getFeedbackItem(id)));
+  }
 
   const validItems = items.filter((item): item is FeedbackItem => item !== null);
 
