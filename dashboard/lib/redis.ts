@@ -70,11 +70,17 @@ export async function getFeedbackItem(id: string): Promise<FeedbackItem | null> 
 
   return {
     id: data.id as string,
-    source: data.source as 'reddit' | 'sentry' | 'manual',
+    source: data.source as 'reddit' | 'sentry' | 'manual' | 'github',
     external_id: data.external_id as string | null | undefined,
     title: data.title as string,
     body: data.body as string,
+    repo: data.repo as string | undefined,
     github_repo_url: data.github_repo_url as string | undefined,
+    github_issue_number: data.github_issue_number
+      ? parseInt(data.github_issue_number as string)
+      : undefined,
+    github_issue_url: data.github_issue_url as string | undefined,
+    status: data.status as 'open' | 'closed' | undefined,
     metadata: metadata as Record<string, any>,
     created_at: data.created_at as string,
   };
@@ -191,7 +197,7 @@ export async function getFeedback(
  */
 export async function getStats(): Promise<{
   total_feedback: number;
-  by_source: { reddit: number; sentry: number; manual: number };
+  by_source: { reddit: number; sentry: number; manual: number; github: number };
   total_clusters: number;
 }> {
   // Get total feedback count using ZCARD (more efficient than ZRANGE)
@@ -201,6 +207,7 @@ export async function getStats(): Promise<{
   const redditCount = (await redis.zcard('feedback:source:reddit')) || 0;
   const sentryCount = (await redis.zcard('feedback:source:sentry')) || 0;
   const manualCount = (await redis.zcard('feedback:source:manual')) || 0;
+  const githubCount = (await redis.zcard('feedback:source:github')) || 0;
 
   // Get total clusters count using SCARD on clusters:all set (avoids KEYS command)
   const total_clusters = (await redis.scard('clusters:all')) || 0;
@@ -211,6 +218,7 @@ export async function getStats(): Promise<{
       reddit: redditCount,
       sentry: sentryCount,
       manual: manualCount,
+      github: githubCount,
     },
     total_clusters,
   };
