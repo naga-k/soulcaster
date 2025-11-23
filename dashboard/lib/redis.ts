@@ -73,11 +73,17 @@ export async function getFeedbackItem(id: string): Promise<FeedbackItem | null> 
 
   return {
     id: data.id as string,
-    source: data.source as 'reddit' | 'sentry' | 'manual',
+    source: data.source as 'reddit' | 'manual' | 'github',
     external_id: data.external_id as string | null | undefined,
     title: data.title as string,
     body: data.body as string,
+    repo: data.repo as string | undefined,
     github_repo_url: data.github_repo_url as string | undefined,
+    github_issue_number: data.github_issue_number
+      ? parseInt(data.github_issue_number as string)
+      : undefined,
+    github_issue_url: data.github_issue_url as string | undefined,
+    status: data.status as 'open' | 'closed' | undefined,
     metadata: metadata as Record<string, any>,
     created_at: data.created_at as string,
   };
@@ -96,13 +102,16 @@ export async function getClusters(): Promise<ClusterListItem[]> {
 
       const feedbackIds = await getClusterFeedbackIds(id);
 
-      // Get first few feedback items to determine sources
+      // Get ALL feedback items to determine sources and repos accurately
       const feedbackItems = await Promise.all(
-        feedbackIds.slice(0, 10).map((fid) => getFeedbackItem(fid))
+        feedbackIds.map((fid) => getFeedbackItem(fid))
       );
 
       const validItems = feedbackItems.filter((item): item is FeedbackItem => item !== null);
       const sources = Array.from(new Set(validItems.map((item) => item.source)));
+      const repos = Array.from(
+        new Set(validItems.map((item) => item.repo).filter((repo): repo is string => !!repo))
+      );
 
       const item: ClusterListItem & { created_at: string } = {
         id: cluster.id,
@@ -110,7 +119,8 @@ export async function getClusters(): Promise<ClusterListItem[]> {
         summary: cluster.summary,
         count: feedbackIds.length,
         status: cluster.status,
-        sources: sources as ('reddit' | 'sentry' | 'manual')[],
+        sources: sources as ('reddit' | 'manual' | 'github')[],
+        repos: repos.length > 0 ? repos : undefined,
         created_at: cluster.created_at,
         ...(cluster.github_pr_url && { github_pr_url: cluster.github_pr_url }),
         ...(cluster.issue_title && { issue_title: cluster.issue_title }),
@@ -155,12 +165,13 @@ export async function getClusterDetail(id: string): Promise<ClusterDetail | null
 }
 
 /**
- * Get feedback items with pagination and optional source filter
+ * Get feedback items with pagination and optional source/repo filters
  */
 export async function getFeedback(
   limit: number = 100,
   offset: number = 0,
-  source?: string
+  source?: string,
+  repo?: string
 ): Promise<{ items: FeedbackItem[]; total: number; limit: number; offset: number }> {
   let feedbackIds: string[];
 
@@ -174,13 +185,31 @@ export async function getFeedback(
     feedbackIds = allIds as string[];
   }
 
+  // Apply repo filter if specified
+  if (repo) {
+    // Fetch all items and filter by repo
+    const allItems = await Promise.all(feedbackIds.map((id) => getFeedbackItem(id)));
+    const filteredItems = allItems.filter(
+      (item): item is FeedbackItem => item !== null && item.repo === repo
+    );
+    const filteredIds = filteredItems.map((item) => item.id);
+    feedbackIds = filteredIds;
+  }
+
   const total = feedbackIds.length;
 
   // Apply pagination
   const paginatedIds = feedbackIds.slice(offset, offset + limit);
 
-  // Fetch the actual feedback items
-  const items = await Promise.all(paginatedIds.map((id) => getFeedbackItem(id)));
+  // Fetch the actual feedback items (if not already fetched for repo filtering)
+  let items: (FeedbackItem | null)[];
+  if (repo) {
+    // Already fetched during repo filtering, just paginate
+    const allItems = await Promise.all(feedbackIds.map((id) => getFeedbackItem(id)));
+    items = allItems.slice(0, limit);
+  } else {
+    items = await Promise.all(paginatedIds.map((id) => getFeedbackItem(id)));
+  }
 
   const validItems = items.filter((item): item is FeedbackItem => item !== null);
 
@@ -197,7 +226,7 @@ export async function getFeedback(
  */
 export async function getStats(): Promise<{
   total_feedback: number;
-  by_source: { reddit: number; sentry: number; manual: number };
+  by_source: { reddit: number; manual: number; github: number };
   total_clusters: number;
 }> {
   // Get total feedback count using ZCARD (more efficient than ZRANGE)
@@ -205,8 +234,8 @@ export async function getStats(): Promise<{
 
   // Get counts by source using ZCARD (more efficient than ZRANGE)
   const redditCount = (await redis.zcard('feedback:source:reddit')) || 0;
-  const sentryCount = (await redis.zcard('feedback:source:sentry')) || 0;
   const manualCount = (await redis.zcard('feedback:source:manual')) || 0;
+  const githubCount = (await redis.zcard('feedback:source:github')) || 0;
 
   // Get total clusters count using SCARD on clusters:all set (avoids KEYS command)
   const total_clusters = (await redis.scard('clusters:all')) || 0;
@@ -215,8 +244,8 @@ export async function getStats(): Promise<{
     total_feedback,
     by_source: {
       reddit: redditCount,
-      sentry: sentryCount,
       manual: manualCount,
+      github: githubCount,
     },
     total_clusters,
   };
@@ -263,7 +292,7 @@ export async function createFeedback(data: {
   title: string;
   body: string;
   github_repo_url?: string;
-  source?: 'reddit' | 'sentry' | 'manual';
+  source?: 'reddit' | 'manual';
   metadata?: Record<string, any>;
 }): Promise<string> {
   const id = randomUUID();

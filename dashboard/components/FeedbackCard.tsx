@@ -35,8 +35,21 @@ export default function FeedbackCard({ item }: FeedbackCardProps) {
     switch (source) {
       case 'reddit':
         return '🗨️';
-      case 'sentry':
-        return '⚠️';
+      case 'github':
+        return (
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="w-5 h-5"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+              clipRule="evenodd"
+            />
+          </svg>
+        );
       case 'manual':
         return '✍️';
     }
@@ -46,8 +59,8 @@ export default function FeedbackCard({ item }: FeedbackCardProps) {
     switch (source) {
       case 'reddit':
         return 'bg-orange-900/20 text-orange-400 border border-orange-900/50';
-      case 'sentry':
-        return 'bg-red-900/20 text-red-400 border border-red-900/50';
+      case 'github':
+        return 'bg-purple-900/20 text-purple-400 border border-purple-900/50';
       case 'manual':
         return 'bg-matrix-green-dim text-matrix-green border border-matrix-green/30';
     }
@@ -93,9 +106,76 @@ export default function FeedbackCard({ item }: FeedbackCardProps) {
           </div>
         </div>
 
+        {/* GitHub-specific metadata badges */}
+        {feedbackItem.source === 'github' && (
+          <div className="flex flex-wrap gap-2">
+            {feedbackItem.repo && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-purple-900/50 bg-purple-900/20 px-2 py-1 text-[10px] font-medium text-purple-300">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                  <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z" />
+                </svg>
+                {feedbackItem.repo}
+              </span>
+            )}
+            {feedbackItem.github_issue_number && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-purple-900/50 bg-purple-900/20 px-2 py-1 text-[10px] font-medium text-purple-300">
+                #{feedbackItem.github_issue_number}
+              </span>
+            )}
+            {feedbackItem.status && (
+              <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium ${
+                feedbackItem.status === 'open'
+                  ? 'border-green-900/50 bg-green-900/20 text-green-300'
+                  : 'border-gray-900/50 bg-gray-900/20 text-gray-300'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  feedbackItem.status === 'open' ? 'bg-green-400' : 'bg-gray-400'
+                }`} />
+                {feedbackItem.status}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Title - clickable for GitHub issues */}
+        {feedbackItem.source === 'github' && feedbackItem.title && (
+          <div>
+            {feedbackItem.github_issue_url ? (
+              <a
+                href={feedbackItem.github_issue_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-base font-semibold text-white hover:text-purple-300 transition-colors line-clamp-2 block"
+              >
+                {feedbackItem.title}
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="w-3 h-3 inline-block ml-1 opacity-50"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5z"
+                    clipRule="evenodd"
+                  />
+                  <path
+                    fillRule="evenodd"
+                    d="M6.194 12.753a.75.75 0 001.06.053L16.5 4.44v2.81a.75.75 0 001.5 0v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 000 1.5h2.553l-9.056 8.194a.75.75 0 00-.053 1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </a>
+            ) : (
+              <h3 className="text-base font-semibold text-white line-clamp-2">
+                {feedbackItem.title}
+              </h3>
+            )}
+          </div>
+        )}
+
         <p className="text-sm leading-relaxed text-slate-300 line-clamp-4">{feedbackItem.body}</p>
 
-        {feedbackItem.github_repo_url && (
+        {feedbackItem.github_repo_url && feedbackItem.source !== 'github' && (
           <a
             href={feedbackItem.github_repo_url}
             target="_blank"
