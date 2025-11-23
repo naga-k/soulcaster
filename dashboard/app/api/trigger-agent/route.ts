@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
 import { Octokit } from 'octokit';
+import { getGitHubToken } from '@/lib/auth';
 
 const ecsClient = new ECSClient({
     region: process.env.AWS_REGION || 'us-east-1',
@@ -13,21 +14,23 @@ const ecsClient = new ECSClient({
 export async function POST(request: Request) {
     try {
         const body = await request.json();
+        const githubToken = await getGitHubToken();
+
         console.log('Trigger Agent Request:', {
-            hasGithubToken: !!process.env.GITHUB_TOKEN,
+            hasGithubToken: !!githubToken,
             bodyKeys: Object.keys(body)
         });
         let { issue_url } = body;
         const { context, issue_title, repo: paramRepo, owner: paramOwner, repo_url } = body;
 
         // Verify issue_url if provided
-        if (issue_url && process.env.GITHUB_TOKEN) {
+        if (issue_url && githubToken) {
             try {
                 // Parse URL: https://github.com/owner/repo/issues/123
                 const match = issue_url.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
                 if (match) {
                     const [_, owner, repo, issue_number] = match;
-                    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+                    const octokit = new Octokit({ auth: githubToken });
                     await octokit.rest.issues.get({
                         owner,
                         repo,
@@ -55,9 +58,9 @@ export async function POST(request: Request) {
 
         // If no issue_url provided, try to create one from context
         if (!issue_url) {
-            if (context && process.env.GITHUB_TOKEN) {
+            if (context && githubToken) {
                 try {
-                    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+                    const octokit = new Octokit({ auth: githubToken });
                     let owner = paramOwner || process.env.GITHUB_OWNER;
                     let repo = paramRepo || process.env.GITHUB_REPO;
 

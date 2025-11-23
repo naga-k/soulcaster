@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import UnicornBackground from '@/components/UnicornBackground';
 import DashboardHeader from '@/components/DashboardHeader';
+import SessionProvider from '@/components/SessionProvider';
 import './globals.css';
 
 const geistSans = Geist({
@@ -35,11 +36,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased text-white font-sans`}>
-        <UnicornBackground />
-        <div className="min-h-screen relative z-10">
-          <DashboardHeader />
-          {children}
-        </div>
+        <SessionProvider>
+          <UnicornBackground />
+          <div className="min-h-screen relative z-10">
+            <DashboardHeader />
+            {children}
+          </div>
+        </SessionProvider>
       </body>
     </html>
   );
