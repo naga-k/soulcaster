@@ -21,3 +21,5 @@ wheels/
 
 # Environment variables
 .env
+
+./bad-ux-mart

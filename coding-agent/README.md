@@ -71,20 +71,20 @@ docker build -t coding-agent .
 
 ### 2. Run the Container
 
-You need to pass your `GEMINI_API_KEY` and a `GH_TOKEN` (GitHub Personal Access Token) so the agent can clone repos and create PRs.
+Pass env variables using .env file locally.
 
 ```bash
 docker run -it \
-  -e GEMINI_API_KEY=your_api_key_here \
-  -e GH_TOKEN=your_github_token_here \
+  --env-file .env \
   coding-agent https://github.com/owner/repo/issues/123
 ```
 
-**Note:**
-*   `GH_TOKEN`: Create a Personal Access Token (Classic) with `repo` scope at [https://github.com/settings/tokens](https://github.com/settings/tokens).
-*   Replace `your_api_key_here` with your actual Gemini API key.
-*   Replace `your_github_token_here` with your GitHub token.
-*   Replace the URL with the actual issue you want to fix.
+**Environment Variables:**
+- `GEMINI_API_KEY`: Your Gemini API key (required)
+- `GH_TOKEN`: GitHub Personal Access Token with `repo` scope (required). Create one at [https://github.com/settings/tokens](https://github.com/settings/tokens)
+- `GIT_USER_EMAIL`: Email for git commits (required)
+- `GIT_USER_NAME`: Name for git commits (required)
+- `KILO_API_MODEL_ID`: Gemini model to use (optional, defaults to `gemini-2.5-flash-preview-04-17`)
 
 ## AWS Fargate Deployment
 

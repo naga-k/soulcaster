@@ -33,6 +33,7 @@ COPY . /app
 
 # Define environment variable
 ENV NAME CodingAgent
+ENV PYTHONUNBUFFERED=1
 
 # Run fix_issue.py when the container launches
 # The arguments will be passed via the ECS RunTask overrides
