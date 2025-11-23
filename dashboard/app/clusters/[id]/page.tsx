@@ -415,27 +415,8 @@ export default function ClusterDetailPage() {
                 <button className="w-full py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-colors">
                   Run Diagnostics
                 </button>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-medium tracking-tight text-slate-50 flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Live Feed
-            </h2>
-            <div className="flex gap-2">
-              <span className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-400">Real-time</span>
-              <span className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">Connected</span>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {cluster.feedback_items.map((item) => (
-              <FeedbackCard key={item.id} item={item} />
-            ))}
-            {cluster.feedback_items.length === 0 && (
-              <div className="text-center py-12 rounded-3xl border border-white/10 bg-white/5 border-dashed">
-                <p className="text-slate-400">No feedback items found for this cluster.</p>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
