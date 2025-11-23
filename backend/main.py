@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Literal
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 try:
-    from .models import FeedbackItem, IssueCluster
+    from .models import FeedbackItem, IssueCluster, AgentJob
     from .store import (
         add_cluster,
         add_feedback_item,
@@ -32,9 +32,13 @@ try:
         set_reddit_subreddits,
         get_reddit_subreddits,
         update_cluster,
+        add_job,
+        get_job,
+        update_job,
+        get_jobs_by_cluster,
     )
 except ImportError:
-    from models import FeedbackItem, IssueCluster
+    from models import FeedbackItem, IssueCluster, AgentJob
     from store import (
         add_cluster,
         add_feedback_item,
@@ -46,6 +50,10 @@ except ImportError:
         set_reddit_subreddits,
         get_reddit_subreddits,
         update_cluster,
+        add_job,
+        get_job,
+        update_job,
+        get_jobs_by_cluster,
     )
 
 app = FastAPI(
@@ -462,3 +470,66 @@ def seed_mock_data():
 
     add_cluster(cluster)
     return {"cluster_id": cluster.id, "feedback_ids": [feedback_one.id, feedback_two.id, feedback_three.id]}
+
+
+# --- Agent Jobs ---
+
+
+class CreateJobRequest(BaseModel):
+    cluster_id: UUID
+
+
+class UpdateJobRequest(BaseModel):
+    status: Optional[Literal["pending", "running", "success", "failed"]] = None
+    logs: Optional[str] = None
+
+
+@app.post("/jobs")
+def create_job(payload: CreateJobRequest):
+    """Create a new tracking job for the coding agent."""
+    now = datetime.now(timezone.utc)
+    job = AgentJob(
+        id=uuid4(),
+        cluster_id=payload.cluster_id,
+        status="pending",
+        logs=None,
+        created_at=now,
+        updated_at=now,
+    )
+    add_job(job)
+    return {"status": "ok", "job_id": str(job.id)}
+
+
+@app.patch("/jobs/{job_id}")
+def update_job_status(job_id: UUID, payload: UpdateJobRequest):
+    """Update job status and/or logs."""
+    updates = {}
+    if payload.status:
+        updates["status"] = payload.status
+    if payload.logs is not None:
+        updates["logs"] = payload.logs
+    
+    if not updates:
+        return {"status": "ok", "message": "No updates provided"}
+
+    updates["updated_at"] = datetime.now(timezone.utc)
+    try:
+        update_job(job_id, **updates)
+        return {"status": "ok"}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+
+@app.get("/jobs/{job_id}")
+def get_job_details(job_id: UUID):
+    """Retrieve details of a specific job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.get("/clusters/{cluster_id}/jobs")
+def get_cluster_jobs(cluster_id: UUID):
+    """List all jobs associated with a cluster."""
+    return get_jobs_by_cluster(cluster_id)

@@ -7,6 +7,19 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class AgentJob(BaseModel):
+    """
+    Represents a background job for the coding agent.
+    """
+
+    id: UUID
+    cluster_id: UUID
+    status: Literal["pending", "running", "success", "failed"]
+    logs: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class FeedbackItem(BaseModel):
     """
     Represents a single piece of user feedback from any source.

@@ -98,6 +98,42 @@ export async function POST(request: Request) {
             );
         }
 
+        // Create a job record in backend
+        let jobId = null;
+        const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+        // We assume cluster ID might be passed in body, or we might need to infer it?
+        // The current trigger-agent API doesn't strictly require cluster_id, but start_fix passes it.
+        // Let's check if we can get cluster_id from body or context.
+        // Actually start_fix endpoint calls this.
+        // We should probably accept cluster_id in the body of this endpoint.
+        
+        const { cluster_id } = body;
+        if (cluster_id) {
+            try {
+                const jobRes = await fetch(`${BACKEND_URL}/jobs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cluster_id }),
+                });
+                if (jobRes.ok) {
+                    const jobData = await jobRes.json();
+                    jobId = jobData.job_id;
+                    console.log(`Created tracking job: ${jobId}`);
+                } else {
+                    console.error('Failed to create tracking job:', await jobRes.text());
+                }
+            } catch (e) {
+                console.error('Error creating tracking job:', e);
+            }
+        }
+
+        const envOverrides = [
+             { name: "BACKEND_URL", value: BACKEND_URL },
+        ];
+        if (jobId) {
+            envOverrides.push({ name: "JOB_ID", value: jobId });
+        }
+
         const command = new RunTaskCommand({
             cluster: process.env.ECS_CLUSTER_NAME,
             taskDefinition: process.env.ECS_TASK_DEFINITION,
@@ -114,6 +150,7 @@ export async function POST(request: Request) {
                     {
                         name: 'coding-agent',
                         command: [issue_url], // ENTRYPOINT already has 'uv run fix_issue.py'
+                        environment: envOverrides,
                     },
                 ],
             },

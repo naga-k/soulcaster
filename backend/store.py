@@ -13,9 +13,9 @@ from uuid import UUID
 import requests
 
 try:
-    from .models import FeedbackItem, IssueCluster
+    from .models import FeedbackItem, IssueCluster, AgentJob
 except ImportError:
-    from models import FeedbackItem, IssueCluster
+    from models import FeedbackItem, IssueCluster, AgentJob
 
 try:
     import redis  # type: ignore
@@ -133,6 +133,7 @@ class InMemoryStore:
     def __init__(self):
         self.feedback_items: Dict[UUID, FeedbackItem] = {}
         self.issue_clusters: Dict[UUID, IssueCluster] = {}
+        self.agent_jobs: Dict[UUID, AgentJob] = {}
         self.reddit_subreddits: Optional[List[str]] = None
 
     # Feedback
@@ -179,6 +180,28 @@ class InMemoryStore:
 
     def clear_config(self):
         self.reddit_subreddits = None
+
+    # Jobs
+    def add_job(self, job: AgentJob) -> AgentJob:
+        self.agent_jobs[job.id] = job
+        return job
+
+    def get_job(self, job_id: UUID) -> Optional[AgentJob]:
+        return self.agent_jobs.get(job_id)
+
+    def update_job(self, job_id: UUID, **updates) -> AgentJob:
+        job = self.agent_jobs[job_id]
+        updated_job = job.model_copy(update=updates)
+        self.agent_jobs[job_id] = updated_job
+        return updated_job
+
+    def get_jobs_by_cluster(self, cluster_id: UUID) -> List[AgentJob]:
+        return [
+            job for job in self.agent_jobs.values() if job.cluster_id == cluster_id
+        ]
+
+    def clear_jobs(self):
+        self.agent_jobs.clear()
 
 
 class RedisStore:
@@ -227,6 +250,14 @@ class RedisStore:
     @staticmethod
     def _reddit_subreddits_key() -> str:
         return "config:reddit:subreddits"
+
+    @staticmethod
+    def _job_key(job_id: UUID) -> str:
+        return f"job:{job_id}"
+
+    @staticmethod
+    def _cluster_jobs_key(cluster_id: UUID) -> str:
+        return f"cluster:jobs:{cluster_id}"
 
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
@@ -419,6 +450,60 @@ class RedisStore:
     def clear_config(self):
         self._delete(self._reddit_subreddits_key())
 
+    # Jobs
+    def add_job(self, job: AgentJob) -> AgentJob:
+        payload = job.model_dump()
+        for field in ("created_at", "updated_at"):
+            if isinstance(payload.get(field), datetime):
+                payload[field] = _dt_to_iso(payload[field])
+
+        # Use HSET
+        hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+        key = self._job_key(job.id)
+        self._hset(key, hash_payload)
+
+        # Add to cluster index (sorted by created_at)
+        ts = job.created_at.timestamp()
+        self._zadd(self._cluster_jobs_key(job.cluster_id), ts, str(job.id))
+        return job
+
+    def get_job(self, job_id: UUID) -> Optional[AgentJob]:
+        key = self._job_key(job_id)
+        data = self._hgetall(key)
+        if not data:
+            return None
+
+        for field in ("created_at", "updated_at"):
+            if isinstance(data.get(field), str):
+                data[field] = _iso_to_dt(data[field])
+
+        return AgentJob(**data)
+
+    def update_job(self, job_id: UUID, **updates) -> AgentJob:
+        job = self.get_job(job_id)
+        if not job:
+            raise KeyError(f"Job {job_id} not found")
+        updated = job.model_copy(update=updates)
+        return self.add_job(updated)
+
+    def get_jobs_by_cluster(self, cluster_id: UUID) -> List[AgentJob]:
+        key = self._cluster_jobs_key(cluster_id)
+        ids = self._zrange(key, 0, -1, rev=True)  # Newest first
+        jobs: List[AgentJob] = []
+        for jid in ids:
+            try:
+                job = self.get_job(UUID(jid))
+                if job:
+                    jobs.append(job)
+            except ValueError:
+                continue
+        return jobs
+
+    def clear_jobs(self):
+        job_keys = list(self._scan_iter("job:*")) + list(self._scan_iter("cluster:jobs:*"))
+        if job_keys:
+            self._delete(*job_keys)
+
     # --- client wrappers ---
     def _set(self, key: str, value: str):
         if self.mode == "redis":
@@ -542,3 +627,24 @@ def clear_config():
     # Primarily for tests
     if hasattr(_STORE, "clear_config"):
         _STORE.clear_config()
+
+
+def add_job(job: AgentJob) -> AgentJob:
+    return _STORE.add_job(job)
+
+
+def get_job(job_id: UUID) -> Optional[AgentJob]:
+    return _STORE.get_job(job_id)
+
+
+def update_job(job_id: UUID, **updates) -> AgentJob:
+    return _STORE.update_job(job_id, **updates)
+
+
+def get_jobs_by_cluster(cluster_id: UUID) -> List[AgentJob]:
+    return _STORE.get_jobs_by_cluster(cluster_id)
+
+
+def clear_jobs():
+    if hasattr(_STORE, "clear_jobs"):
+        _STORE.clear_jobs()
