@@ -72,7 +72,7 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-white mb-3 group-hover:text-matrix-green transition-colors">Listen</h3>
             <p className="text-gray-400 leading-relaxed">
-              Automatically ingests feedback from Reddit communities and Sentry error reports in
+              Automatically ingests feedback from Reddit communities and GitHub issues in
               real-time.
             </p>
           </div>

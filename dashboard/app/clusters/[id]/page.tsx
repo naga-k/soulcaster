@@ -89,8 +89,8 @@ export default function ClusterDetailPage() {
     switch (source) {
       case 'reddit':
         return '🗨️ Reddit';
-      case 'sentry':
-        return '⚠️ Sentry';
+      case 'github':
+        return '🐙 GitHub';
       case 'manual':
         return '✍️ Manual';
     }

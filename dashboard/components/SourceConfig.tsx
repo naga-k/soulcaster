@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { GitHubRepo } from '@/types';
 
-type SourceType = 'reddit' | 'sentry' | 'github';
+type SourceType = 'reddit' | 'github';
 
 export default function SourceConfig() {
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
@@ -70,12 +70,6 @@ export default function SourceConfig() {
       icon: '⚙️',
       title: 'GitHub Issues',
       description: 'Sync open-source repository issues automatically',
-    },
-    {
-      type: 'sentry' as const,
-      icon: '⚠️',
-      title: 'Sentry Webhook',
-      description: 'Receive error reports from Sentry in real-time',
     },
   ];
 
@@ -444,44 +438,6 @@ export default function SourceConfig() {
             {repoError && <p className="text-sm text-rose-400">{repoError}</p>}
             <p className="text-xs text-slate-500">
               Supports public repos. Set GITHUB_TOKEN for higher rate limits (5000/hr vs 60/hr).
-            </p>
-          </div>
-        </div>
-      )}
-
-      {selectedSource === 'sentry' && (
-        <div className="border-t border-white/10 pt-4 space-y-3 relative z-10">
-          <h4 className="font-semibold text-slate-200">Sentry Setup Instructions</h4>
-          <div className="bg-black/20 border border-white/5 p-4 rounded-xl text-sm space-y-2">
-            <p className="text-slate-300">
-              <strong>1. Configure webhook URL in Sentry:</strong>
-            </p>
-            <pre className="bg-black/60 border border-white/10 text-emerald-400/90 p-3 rounded-lg overflow-x-auto font-mono text-xs">
-              {typeof window !== 'undefined'
-                ? `${window.location.origin}/api/ingest/sentry`
-                : 'http://your-domain.com/api/ingest/sentry'}
-            </pre>
-
-            <p className="text-slate-300">
-              <strong>2. In Sentry project settings:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1 text-slate-400">
-              <li>Go to Settings → Integrations → WebHooks</li>
-              <li>Add the webhook URL above</li>
-              <li>Enable "Issue" events</li>
-              <li>Save the webhook configuration</li>
-            </ul>
-
-            <p className="text-slate-500 mt-3">
-              📖 Learn more at{' '}
-              <a
-                href="https://docs.sentry.io/product/integrations/integration-platform/webhooks/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 hover:underline"
-              >
-                Sentry Webhook Docs
-              </a>
             </p>
           </div>
         </div>

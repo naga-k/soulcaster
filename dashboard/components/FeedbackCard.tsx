@@ -50,8 +50,6 @@ export default function FeedbackCard({ item }: FeedbackCardProps) {
             />
           </svg>
         );
-      case 'sentry':
-        return '⚠️';
       case 'manual':
         return '✍️';
     }
@@ -63,8 +61,6 @@ export default function FeedbackCard({ item }: FeedbackCardProps) {
         return 'bg-orange-900/20 text-orange-400 border border-orange-900/50';
       case 'github':
         return 'bg-purple-900/20 text-purple-400 border border-purple-900/50';
-      case 'sentry':
-        return 'bg-red-900/20 text-red-400 border border-red-900/50';
       case 'manual':
         return 'bg-matrix-green-dim text-matrix-green border border-matrix-green/30';
     }

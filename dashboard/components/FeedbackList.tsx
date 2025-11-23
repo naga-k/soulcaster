@@ -91,7 +91,7 @@ export default function FeedbackList({ refreshTrigger }: FeedbackListProps) {
     <div>
       {/* Filter tabs */}
       <div className="flex gap-2 mb-6 border-b border-white/10 pb-1">
-        {(['all', 'reddit', 'github', 'sentry', 'manual'] as const).map((filter) => (
+        {(['all', 'reddit', 'github', 'manual'] as const).map((filter) => (
           <button
             key={filter}
             onClick={() => setSourceFilter(filter)}
@@ -135,7 +135,7 @@ export default function FeedbackList({ refreshTrigger }: FeedbackListProps) {
           <h3 className="text-lg font-medium text-white">No feedback items found</h3>
           <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
             {sourceFilter === 'all'
-              ? 'Start by submitting manual feedback or configuring Reddit/Sentry sources.'
+              ? 'Start by submitting manual feedback or configuring Reddit sources.'
               : `No ${sourceFilter} feedback items yet.`}
           </p>
         </div>

@@ -6,7 +6,7 @@ Next.js dashboard for the FeedbackAgent self-healing dev loop system.
 
 This dashboard provides a web interface for:
 
-- Viewing clustered issues from Reddit and Sentry feedback
+- Viewing clustered issues from Reddit and GitHub feedback
 - Reviewing cluster details and associated feedback items
 - Triggering the coding agent to generate fixes
 - Monitoring PR creation status
