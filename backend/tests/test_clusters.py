@@ -105,3 +105,33 @@ def test_start_fix_updates_cluster_status():
 
     updated_cluster = get_cluster(cluster.id)
     assert updated_cluster.status == "fixing"
+
+
+def test_cluster_fields_include_github_metadata():
+    now = datetime.now(timezone.utc)
+    cluster = IssueCluster(
+        id=uuid4(),
+        title="GitHub PR Cluster",
+        summary="Cluster with PR",
+        feedback_ids=[],
+        status="fixed",
+        created_at=now,
+        updated_at=now,
+        github_pr_url="https://github.com/owner/repo/pull/123",
+        github_branch="fix-issue-123"
+    )
+    add_cluster(cluster)
+
+    # Check list endpoint
+    response = client.get("/clusters")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["github_pr_url"] == "https://github.com/owner/repo/pull/123"
+
+    # Check detail endpoint
+    response = client.get(f"/clusters/{cluster.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["github_pr_url"] == "https://github.com/owner/repo/pull/123"
+    assert data["github_branch"] == "fix-issue-123"

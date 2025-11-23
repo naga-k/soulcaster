@@ -68,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 issue_title: clusterData?.title,
                 owner: repoOwner,
                 repo: repoName,
+                cluster_id: id,
             })
         });
 
