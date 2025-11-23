@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**FeedbackAgent** is a self-healing dev loop MVP built for a 24-hour hackathon. The system ingests bug reports from Reddit and Sentry, uses LLM-based triage to cluster feedback into issues, and automatically generates code fixes via a coding agent that opens GitHub PRs.
+**FeedbackAgent** is a self-healing dev loop MVP built for a 24-hour hackathon. The system ingests bug reports from Reddit and GitHub issues, uses LLM-based triage to cluster feedback into issues, and automatically generates code fixes via a coding agent that opens GitHub PRs.
 
-**Flow**: Reddit/Sentry → Clustered Issues → Human triage dashboard → One-Click Fix → GitHub PR
+**Flow**: Reddit/GitHub → Clustered Issues → Human triage dashboard → One-Click Fix → GitHub PR
 
 ## Architecture
 
 ### Three-Layer System ("Ears, Brain, Hands")
 
 1. **The Ears (Ingestion Layer)**
-   - Python service with Reddit poller (PRAW) and Sentry webhook endpoint
+   - Python service with Reddit poller (PRAW) and GitHub API integration
    - Normalizes feedback into `FeedbackItem` schema
    - In-memory storage (Python dicts) for MVP - no database
 
@@ -113,11 +113,11 @@ pkill -f "next dev" && rm -rf .next && npm run dev
 
 ### FeedbackItem
 - `id`: UUID
-- `source`: "reddit" | "sentry"
+- `source`: "reddit" | "github" | "manual"
 - `external_id`: Original source ID
 - `title`: Post title or truncated comment
 - `body`: Full text content
-- `metadata`: JSON (subreddit, permalink, stack frames, etc.)
+- `metadata`: JSON (subreddit, permalink, etc.)
 - `created_at`: Timestamp
 - `embedding`: Vector representation
 
@@ -136,7 +136,7 @@ pkill -f "next dev" && rm -rf .next && npm run dev
 ## API Endpoints
 
 ### Backend (Python/FastAPI) - NOT IMPLEMENTED
-- Planned: `POST /ingest/reddit`, `POST /ingest/sentry`
+- Planned: `POST /ingest/reddit`
 - Planned: `GET /clusters`, `GET /clusters/{id}`, `POST /clusters/{id}/start_fix`
 
 ### Frontend API Routes (Next.js) - IMPLEMENTED
@@ -170,10 +170,9 @@ pkill -f "next dev" && rm -rf .next && npm run dev
 **Debugging**: Use `POST /api/clusters/reset` to clear all clusters and re-run from scratch
 
 ### Candidate File Selection (Coding Agent)
-1. **From Sentry feedback**: Extract filenames from stack traces, match against repo paths
-2. **From text**: Extract keywords from cluster title, match file paths (case-insensitive)
-3. **Limit**: Max 3-5 files, max 10k chars per file
-4. **Fallback**: Send truncated file list to LLM for selection
+1. **From text**: Extract keywords from cluster title, match file paths (case-insensitive)
+2. **Limit**: Max 3-5 files, max 10k chars per file
+3. **Fallback**: Send truncated file list to LLM for selection
 
 ### Patch Generation
 - Prompt includes: cluster summary, feedback snippets, candidate file contents
@@ -226,7 +225,6 @@ ANTHROPIC_API_KEY=
 - No auth/permissions (hardcoded env vars only)
 - No multi-repo support
 - No automated Reddit polling (manual submission only)
-- No Sentry integration
 - No coding agent / PR generation
 - No robust retries/rate limiting
 - No chat UI (click-to-fix only)
@@ -255,7 +253,6 @@ Future: Write tests for:
 
 **DO NOT implement these during MVP:**
 - Automated Reddit polling with PRAW
-- Sentry webhook integration
 - Coding agent with PR generation (PyGithub)
 - LLM-based cluster summarization
 - Incremental clustering (only process new items)

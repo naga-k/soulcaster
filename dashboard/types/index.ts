@@ -1,6 +1,6 @@
 // Shared TypeScript types for FeedbackAgent dashboard
 
-export type FeedbackSource = 'reddit' | 'sentry' | 'manual' | 'github';
+export type FeedbackSource = 'reddit' | 'manual' | 'github';
 
 export type ClusterStatus = 'new' | 'fixing' | 'pr_opened' | 'failed';
 
@@ -33,7 +33,6 @@ export interface StatsResponse {
   total_feedback: number;
   by_source: {
     reddit: number;
-    sentry: number;
     manual: number;
     github: number;
   };

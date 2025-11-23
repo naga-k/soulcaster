@@ -70,7 +70,7 @@ export async function getFeedbackItem(id: string): Promise<FeedbackItem | null> 
 
   return {
     id: data.id as string,
-    source: data.source as 'reddit' | 'sentry' | 'manual' | 'github',
+    source: data.source as 'reddit' | 'manual' | 'github',
     external_id: data.external_id as string | null | undefined,
     title: data.title as string,
     body: data.body as string,
@@ -116,7 +116,7 @@ export async function getClusters(): Promise<ClusterListItem[]> {
         summary: cluster.summary,
         count: feedbackIds.length,
         status: cluster.status,
-        sources: sources as ('reddit' | 'sentry' | 'manual')[],
+        sources: sources as ('reddit' | 'manual' | 'github')[],
         repos: repos.length > 0 ? repos : undefined,
         created_at: cluster.created_at,
         ...(cluster.github_pr_url && { github_pr_url: cluster.github_pr_url }),
@@ -220,7 +220,7 @@ export async function getFeedback(
  */
 export async function getStats(): Promise<{
   total_feedback: number;
-  by_source: { reddit: number; sentry: number; manual: number; github: number };
+  by_source: { reddit: number; manual: number; github: number };
   total_clusters: number;
 }> {
   // Get total feedback count using ZCARD (more efficient than ZRANGE)
@@ -228,7 +228,6 @@ export async function getStats(): Promise<{
 
   // Get counts by source using ZCARD (more efficient than ZRANGE)
   const redditCount = (await redis.zcard('feedback:source:reddit')) || 0;
-  const sentryCount = (await redis.zcard('feedback:source:sentry')) || 0;
   const manualCount = (await redis.zcard('feedback:source:manual')) || 0;
   const githubCount = (await redis.zcard('feedback:source:github')) || 0;
 
@@ -239,7 +238,6 @@ export async function getStats(): Promise<{
     total_feedback,
     by_source: {
       reddit: redditCount,
-      sentry: sentryCount,
       manual: manualCount,
       github: githubCount,
     },
@@ -288,7 +286,7 @@ export async function createFeedback(data: {
   title: string;
   body: string;
   github_repo_url?: string;
-  source?: 'reddit' | 'sentry' | 'manual';
+  source?: 'reddit' | 'manual';
   metadata?: Record<string, any>;
 }): Promise<string> {
   const id = randomUUID();
