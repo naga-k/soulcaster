@@ -11,3 +11,7 @@ process.env.NEXTAUTH_SECRET = 'test-secret'
 process.env.GITHUB_ID = 'test-github-id'
 process.env.GITHUB_SECRET = 'test-github-secret'
 process.env.GITHUB_TOKEN = 'test-env-token'
+
+// Upstash Vector env vars (mock values for testing)
+process.env.UPSTASH_VECTOR_REST_URL = 'https://test-vector.upstash.io'
+process.env.UPSTASH_VECTOR_REST_TOKEN = 'test-vector-token'

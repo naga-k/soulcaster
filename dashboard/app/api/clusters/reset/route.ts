@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
+import { Index } from '@upstash/vector';
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
+
+const vectorIndex = new Index({
+  url: process.env.UPSTASH_VECTOR_REST_URL!,
+  token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
 });
 
 /**
@@ -27,13 +33,24 @@ export async function POST() {
     // Clear clusters:all set
     await redis.del('clusters:all');
 
+    // Clear Upstash Vector index
+    console.log('[Reset] Clearing vector index...');
+    try {
+      await vectorIndex.reset();
+      console.log('[Reset] Vector index cleared');
+    } catch (vectorError) {
+      console.error('[Reset] Error clearing vector index:', vectorError);
+      // Continue anyway - vector index may be empty
+    }
+
     // Get all feedback IDs from the created sorted set
     const feedbackIds = (await redis.zrange('feedback:created', 0, -1)) as string[];
     console.log(`[Reset] Found ${feedbackIds.length} feedback items to reset`);
 
-    // Mark all feedback as unclustered
+    // Mark all feedback as unclustered and clear stored embeddings
     for (const feedbackId of feedbackIds) {
       await redis.hset(`feedback:${feedbackId}`, { clustered: 'false' });
+      await redis.hdel(`feedback:${feedbackId}`, 'embedding');
       await redis.sadd('feedback:unclustered', feedbackId);
     }
 
