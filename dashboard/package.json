@@ -22,6 +22,7 @@
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "@upstash/redis": "^1.35.6",
+    "@upstash/vector": "^1.2.2",
     "autoprefixer": "^10.4.22",
     "dotenv": "^17.2.3",
     "eslint-config-next": "^16.0.3",
