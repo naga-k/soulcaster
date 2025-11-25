@@ -17,6 +17,10 @@ const redis = new Redis({
 /**
  * Execute batched Redis operations using pipeline
  * This is MUCH more efficient than individual calls
+ *
+ * @param idsToRemoveFromUnclustered - Only IDs that were successfully clustered
+ *   or whose feedback document was missing. IDs that failed embedding generation
+ *   are NOT included here so they remain in feedback:unclustered for retry.
  */
 async function executeBatchedRedisOperations(
   batch: ClusteringBatch,
@@ -27,7 +31,7 @@ async function executeBatchedRedisOperations(
     string,
     { title: string; summary: string; issueTitle?: string; issueDescription?: string; repoUrl?: string }
   >,
-  unclusteredIds: string[]
+  idsToRemoveFromUnclustered: Set<string>
 ): Promise<void> {
   const pipeline = redis.pipeline();
 
@@ -88,9 +92,10 @@ async function executeBatchedRedisOperations(
     }
   }
 
-  // Remove items from unclustered set (batch operation)
-  if (unclusteredIds.length > 0) {
-    for (const id of unclusteredIds) {
+  // Remove only successfully processed items from unclustered set
+  // IDs that failed embedding generation remain for retry
+  if (idsToRemoveFromUnclustered.size > 0) {
+    for (const id of idsToRemoveFromUnclustered) {
       pipeline.srem('feedback:unclustered', id);
     }
   }
@@ -127,9 +132,24 @@ export async function POST() {
       });
     }
 
-    // Fetch unclustered feedback items
+    // Fetch unclustered feedback items and track which IDs are missing
     const feedbackItems = await Promise.all(unclusteredIds.map((id) => getFeedbackItem(id)));
-    const validFeedback = feedbackItems.filter((item): item is FeedbackItem => item !== null);
+    const validFeedback: FeedbackItem[] = [];
+    const missingFeedbackIds: Set<string> = new Set();
+
+    for (let i = 0; i < unclusteredIds.length; i++) {
+      const item = feedbackItems[i];
+      if (item !== null) {
+        validFeedback.push(item);
+      } else {
+        // Track missing IDs - these should be removed from unclustered set
+        missingFeedbackIds.add(unclusteredIds[i]);
+      }
+    }
+
+    if (missingFeedbackIds.size > 0) {
+      console.log(`[Clustering] ${missingFeedbackIds.size} feedback items not found (will be removed from unclustered)`);
+    }
 
     // Get existing clusters
     const existingClusterIds = await getClusterIds();
@@ -229,6 +249,20 @@ export async function POST() {
       })
     );
 
+    // Build set of IDs to remove from unclustered:
+    // 1. IDs that were successfully clustered (appear in results)
+    // 2. IDs whose feedback document was missing
+    // IDs that failed embedding generation are NOT removed - they stay for retry
+    const idsToRemoveFromUnclustered = new Set<string>(missingFeedbackIds);
+    for (const result of results) {
+      idsToRemoveFromUnclustered.add(result.feedbackId);
+    }
+
+    const failedEmbeddingCount = validFeedback.length - results.length;
+    if (failedEmbeddingCount > 0) {
+      console.log(`[Clustering] ${failedEmbeddingCount} items failed embedding generation (will retry next run)`);
+    }
+
     // OPTIMIZATION: Execute all Redis operations in a single pipeline
     await executeBatchedRedisOperations(
       batch,
@@ -236,7 +270,7 @@ export async function POST() {
       changedClusterIds,
       newClusterIds,
       summariesByClusterId,
-      unclusteredIds
+      idsToRemoveFromUnclustered
     );
 
     const duration = Date.now() - startTime;
@@ -245,10 +279,12 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       message: 'Clustering completed successfully',
-      clustered: validFeedback.length,
+      clustered: results.length,
       newClusters: newClusterIds.size,
       updatedClusters: changedClusterIds.size - newClusterIds.size,
       skippedClusters: updatedClusters.length - changedClusterIds.size,
+      failedEmbeddings: failedEmbeddingCount,
+      missingFeedback: missingFeedbackIds.size,
       durationMs: duration,
     });
   } catch (error) {
