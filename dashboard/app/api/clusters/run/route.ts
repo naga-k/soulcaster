@@ -24,7 +24,6 @@ const redis = new Redis({
  */
 async function executeBatchedRedisOperations(
   batch: ClusteringBatch,
-  updatedClusters: ClusterData[],
   changedClusterIds: Set<string>,
   newClusterIds: Set<string>,
   summariesByClusterId: Map<
@@ -37,11 +36,10 @@ async function executeBatchedRedisOperations(
 
   const timestamp = new Date().toISOString();
 
-  // Process only clusters that have changes
-  for (const cluster of updatedClusters) {
-    if (!changedClusterIds.has(cluster.id)) {
-      continue; // Skip unchanged clusters - KEY OPTIMIZATION
-    }
+  // Iterate only changed clusters - O(changed) instead of O(all)
+  for (const clusterId of changedClusterIds) {
+    const cluster = batch.getCluster(clusterId);
+    if (!cluster) continue;
 
     const summary = summariesByClusterId.get(cluster.id);
     const isNew = newClusterIds.has(cluster.id);
@@ -194,20 +192,20 @@ export async function POST() {
       0.65 // similarity threshold
     );
 
-    const updatedClusters = batch.getUpdatedClusters();
+    const allClusters = batch.getUpdatedClusters();
     const newClusterIds = new Set(batch.getNewClusterIds());
     const changedClusterIds = new Set(batch.getChangedClusterIds());
 
     console.log(`[Clustering] Created ${newClusterIds.size} new clusters`);
     console.log(`[Clustering] Modified ${changedClusterIds.size} clusters total`);
     console.log(
-      `[Clustering] Skipping ${updatedClusters.length - changedClusterIds.size} unchanged clusters`
+      `[Clustering] Skipping ${allClusters.length - changedClusterIds.size} unchanged clusters`
     );
 
     // OPTIMIZATION: Only generate summaries for CHANGED clusters
     // This is the biggest performance win - avoid O(n) LLM calls
     const clustersNeedingSummary = batch.getClustersNeedingSummaryRegeneration(
-      updatedClusters.map((c) => c.id)
+      allClusters.map((c) => c.id)
     );
 
     console.log(`[Clustering] Generating summaries for ${clustersNeedingSummary.length} clusters`);
@@ -266,7 +264,6 @@ export async function POST() {
     // OPTIMIZATION: Execute all Redis operations in a single pipeline
     await executeBatchedRedisOperations(
       batch,
-      updatedClusters,
       changedClusterIds,
       newClusterIds,
       summariesByClusterId,
@@ -282,7 +279,7 @@ export async function POST() {
       clustered: results.length,
       newClusters: newClusterIds.size,
       updatedClusters: changedClusterIds.size - newClusterIds.size,
-      skippedClusters: updatedClusters.length - changedClusterIds.size,
+      skippedClusters: allClusters.length - changedClusterIds.size,
       failedEmbeddings: failedEmbeddingCount,
       missingFeedback: missingFeedbackIds.size,
       durationMs: duration,
