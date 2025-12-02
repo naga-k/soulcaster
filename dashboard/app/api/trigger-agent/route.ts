@@ -11,6 +11,18 @@ const ecsClient = new ECSClient({
     },
 });
 
+/**
+ * Trigger a Fargate "coding-agent" task using an existing or newly created GitHub issue.
+ *
+ * Expects the request body to be JSON and may include: `issue_url`, `context`, `issue_title`,
+ * `issue_description`, `repo`, `owner`, `repo_url`, and `cluster_id`. If `issue_url` is provided
+ * and a GitHub token is available the URL is verified; otherwise an issue will be created when
+ * `issue_description`/`context` and repository information are provided and a GitHub token is available.
+ *
+ * @param request - The incoming HTTP Request containing a JSON body with trigger parameters.
+ * @returns On success, an object with `success: true`, `message`, the started `taskArn`, and the `issue_url`.
+ *          On failure, an object containing `error` and `details` is returned with an appropriate HTTP status code.
+ */
 export async function POST(request: Request) {
     try {
         const body = await request.json();

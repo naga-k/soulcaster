@@ -13,6 +13,14 @@ load_dotenv(dotenv_path="backend/.env") # Try specific path if root .env fails o
 # GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 def generate_math_code():
+    """
+    Generate a Python module source string that provides basic arithmetic functions.
+    
+    The returned source defines functions: add, subtract, multiply, divide, power, sqrt, and factorial. Several functions intentionally omit input validation (for example, divide does not guard against zero, sqrt does not guard against negative input, and factorial does not handle negative values).
+    
+    Returns:
+        str: A multi-line string containing the Python source code for the arithmetic module.
+    """
     return """
 import math
 
@@ -53,6 +61,14 @@ def factorial(n):
 """
 
 def generate_string_code():
+    """
+    Generate source code for a small string-utilities Python module.
+    
+    The returned code defines four functions: `reverse_string`, `to_upper`, `is_palindrome`, and `truncate`. The generated module intentionally contains two noteworthy behaviors: `is_palindrome` performs a case-sensitive comparison, and `truncate` raises an `IndexError` when `length` is greater than the input string length.
+    
+    Returns:
+        str: A multi-line string containing the Python source for the string utilities module.
+    """
     return """
 def reverse_string(s):
     \"\"\"Reverses a string.\"\"\"
@@ -77,6 +93,14 @@ def truncate(s, length):
 """
 
 def generate_user_manager_code():
+    """
+    Provide source code for a simple UserManager class with intentionally buggy behaviors.
+    
+    The returned source defines a UserManager that stores users in an internal dictionary and exposes add_user, get_user, and delete_user methods. Observed behaviors in the generated code: add_user stores a user id→name mapping; get_user returns the name or `None` when the id is missing; delete_user checks for membership but does not remove the entry.
+    
+    Returns:
+        str: Python source code as a multi-line string defining the described UserManager class.
+    """
     return """
 class UserManager:
     def __init__(self):
@@ -96,6 +120,18 @@ class UserManager:
 """
 
 def create_local_files(target_dir="."):
+    """
+    Create a project directory at the given path and populate it with example modules and a README.
+    
+    This will remove any existing directory at target_dir, recreate it, and write four files into it:
+    - math_ops.py (generated example math module)
+    - string_utils.py (generated example string utilities)
+    - user_manager.py (generated example user manager)
+    - README.md (short project description)
+    
+    Parameters:
+    	target_dir (str): Path where the project directory will be created; an existing directory at this path will be deleted before creation.
+    """
     print(f"Creating files in {target_dir}...")
     if os.path.exists(target_dir):
         shutil.rmtree(target_dir)
@@ -114,6 +150,15 @@ def create_local_files(target_dir="."):
         f.write("# Test Project\n\nA project with some intentional bugs for testing clustering.\n")
 
 def push_to_github(repo_url, target_dir="."):
+    """
+    Initialize a git repository in target_dir and push its contents to the specified remote repository.
+    
+    Creates a new git repository (or reinitializes one) in target_dir, stages all files, makes an initial commit with message "Initial commit with buggy code", sets the branch to `main`, adds `origin` pointing to repo_url, and force-pushes the `main` branch to the remote. If any git command fails, an error message is printed.
+    
+    Parameters:
+        repo_url (str): The remote repository URL (e.g., "https://github.com/owner/repo.git").
+        target_dir (str): Path to the directory to initialize and push (default: current directory).
+    """
     print(f"Pushing to {repo_url}...")
     try:
         subprocess.run(["git", "init"], cwd=target_dir, check=True)
@@ -126,6 +171,16 @@ def push_to_github(repo_url, target_dir="."):
         print(f"Git operation failed: {e}")
 
 def create_issues(repo_owner, repo_name, token):
+    """
+    Create a set of GitHub issues on the specified repository.
+    
+    Posts a curated, shuffled list of issue payloads (clustered bug reports plus additional noise) to the repository's Issues API, creating each issue in sequence. If the API responds with a non-201 status the response text is printed; on HTTP 403 or 429 the function waits 60 seconds before continuing. The function also pauses briefly between requests to help avoid rate limiting.
+    
+    Parameters:
+    	repo_owner (str): GitHub repository owner (user or organization).
+    	repo_name (str): Repository name.
+    	token (str): Personal access token with permission to create issues on the repository.
+    """
     print(f"Creating issues for {repo_owner}/{repo_name}...")
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues"
     headers = {

@@ -3,8 +3,11 @@ import type { FeedbackItem, GitHubRepo } from '@/types';
 import { getGitHubToken } from '@/lib/auth';
 
 /**
- * Initialize Octokit with optional authentication
- * Using GITHUB_TOKEN provides higher rate limits (5000 req/hr vs 60 req/hr)
+ * Create an Octokit client configured with authentication and a custom user agent.
+ *
+ * Uses the token obtained from getGitHubToken to authenticate requests when available.
+ *
+ * @returns An Octokit instance configured with auth (if a token was returned) and a `FeedbackAgent/1.0` user agent.
  */
 async function getOctokit() {
   const token = await getGitHubToken();
@@ -16,8 +19,11 @@ async function getOctokit() {
 }
 
 /**
- * Validate that a GitHub repository exists and is accessible
- * @throws Error if repo doesn't exist or is not accessible
+ * Check that the given GitHub repository exists and is accessible.
+ *
+ * @returns `true` if the repository exists and is accessible.
+ * @throws Error if the repository is not found or not accessible (HTTP 404).
+ * @throws Error if validation fails for any other reason with the underlying error message.
  */
 export async function validateRepo(owner: string, repo: string): Promise<boolean> {
   const octokit = await getOctokit();
@@ -59,8 +65,14 @@ export function parseRepoString(repoString: string): { owner: string; repo: stri
 }
 
 /**
- * Fetch all open issues from a GitHub repository
- * Filters out pull requests (GitHub API returns PRs in issues endpoint)
+ * Retrieve all issues (open and closed) from a GitHub repository, excluding pull requests.
+ *
+ * Fetches issues sorted by most recently updated. If `since` is provided, only issues
+ * updated at or after that ISO 8601 timestamp are returned.
+ *
+ * @param since - Optional ISO 8601 timestamp to limit results to issues updated since this time
+ * @returns An array of GitHub issue objects with pull requests filtered out
+ * @throws Error if the GitHub API request fails
  */
 export async function fetchRepoIssues(
   owner: string,
@@ -104,7 +116,10 @@ export async function fetchRepoIssues(
 }
 
 /**
- * Get current GitHub API rate limit status
+ * Retrieve the current GitHub API core rate limit status.
+ *
+ * @returns An object with `limit` (maximum requests), `remaining` (requests left), `reset` (time when the limit resets as a `Date`), and `used` (requests consumed).
+ * @throws Rethrows the underlying error if the rate limit request to GitHub fails.
  */
 export async function getRateLimitStatus(): Promise<{
   limit: number;

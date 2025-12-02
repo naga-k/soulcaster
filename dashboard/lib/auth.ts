@@ -44,10 +44,11 @@ export const authOptions: NextAuthOptions = {
 };
 
 /**
- * Gets the GitHub access token for API calls.
- * Priority: User's session token > Environment variable GITHUB_TOKEN
+ * Retrieve the GitHub access token from the current server session.
  *
- * @returns GitHub access token or undefined if neither is available
+ * Attempts to obtain the authenticated server session and return its access token. If session retrieval fails or no session token is available, the function resolves to `undefined`.
+ *
+ * @returns The GitHub access token when available, `undefined` otherwise.
  */
 export async function getGitHubToken(): Promise<string | undefined> {
   try {

@@ -5,6 +5,16 @@ import type { GitHubRepo } from '@/types';
 
 type SourceType = 'reddit' | 'github';
 
+/**
+ * Render a configuration UI for managing Reddit subreddits and GitHub repositories.
+ *
+ * The component displays selectable source panels and provides controls to add, remove,
+ * save, and trigger syncing of configured subreddits and repositories. It manages local
+ * loading, saving, and syncing state while communicating with backend API endpoints to
+ * persist and synchronize configurations.
+ *
+ * @returns A React element containing the sources configuration UI
+ */
 export default function SourceConfig() {
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
 
