@@ -255,13 +255,38 @@ def create_issues(repo_owner, repo_name, token):
 
     for i, issue in enumerate(all_issues):
         print(f"Creating issue {i+1}/{len(all_issues)}: {issue['title']}")
-        response = requests.post(url, json=issue, headers=headers)
-        if response.status_code != 201:
-            print(f"Failed to create issue: {response.text}")
-            # If rate limited, wait a bit
-            if response.status_code == 403 or response.status_code == 429:
-                print("Rate limited, waiting 60s...")
-                time.sleep(60)
+        
+        # Attempt to create issue with retry logic for timeouts
+        max_retries = 1
+        retry_count = 0
+        created = False
+        
+        while retry_count <= max_retries and not created:
+            try:
+                response = requests.post(url, json=issue, headers=headers, timeout=10)
+                
+                if response.status_code != 201:
+                    print(f"Failed to create issue: {response.text}")
+                    # If rate limited, wait a bit
+                    if response.status_code == 403 or response.status_code == 429:
+                        print("Rate limited, waiting 60s...")
+                        time.sleep(60)
+                
+                created = True
+            
+            except requests.exceptions.Timeout:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    print(f"Timeout creating issue '{issue['title']}'. Retrying (attempt {retry_count + 1}/{max_retries + 1})...")
+                    time.sleep(3)  # Wait before retry
+                else:
+                    print(f"Timeout creating issue '{issue['title']}' after {max_retries + 1} attempts. Skipping...")
+                    created = True  # Mark as done to exit loop
+            
+            except requests.exceptions.RequestException as e:
+                print(f"Request error while creating issue '{issue['title']}': {e}")
+                print(f"Skipping issue...")
+                created = True  # Mark as done to exit loop
         
         # Sleep a bit to avoid hitting secondary rate limits
         time.sleep(2)
