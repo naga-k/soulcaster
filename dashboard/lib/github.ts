@@ -3,8 +3,11 @@ import type { FeedbackItem, GitHubRepo } from '@/types';
 import { getGitHubToken } from '@/lib/auth';
 
 /**
- * Initialize Octokit with optional authentication
- * Using GITHUB_TOKEN provides higher rate limits (5000 req/hr vs 60 req/hr)
+ * Create an Octokit client configured with an optional GitHub token and a FeedbackAgent user agent.
+ *
+ * Using a token increases API rate limits (e.g., authenticated requests have higher limits than anonymous requests).
+ *
+ * @returns An Octokit client configured with `auth` (if a token is available) and `userAgent: 'FeedbackAgent/1.0'`.
  */
 async function getOctokit() {
   const token = await getGitHubToken();
@@ -16,8 +19,10 @@ async function getOctokit() {
 }
 
 /**
- * Validate that a GitHub repository exists and is accessible
- * @throws Error if repo doesn't exist or is not accessible
+ * Verify that the specified GitHub repository exists and is accessible.
+ *
+ * @returns `true` if the repository exists and is accessible.
+ * @throws Error if the repository is not found or not accessible (HTTP 404), or if validation fails for another reason.
  */
 export async function validateRepo(owner: string, repo: string): Promise<boolean> {
   const octokit = await getOctokit();
@@ -34,8 +39,13 @@ export async function validateRepo(owner: string, repo: string): Promise<boolean
 }
 
 /**
- * Parse repo string into owner and repo parts
- * Accepts formats: "owner/repo" or "https://github.com/owner/repo"
+ * Parse a repository identifier into its owner and repo components.
+ *
+ * Accepts "owner/repo" or a GitHub URL like "https://github.com/owner/repo" (optional trailing ".git").
+ *
+ * @param repoString - The repository string to parse.
+ * @returns An object with `owner` and `repo` properties.
+ * @throws Error if the format is not "owner/repo" or a valid GitHub URL, or if either part is empty.
  */
 export function parseRepoString(repoString: string): { owner: string; repo: string } {
   // Handle GitHub URLs
@@ -114,7 +124,9 @@ export async function fetchRepoIssues(
 }
 
 /**
- * Get current GitHub API rate limit status
+ * Retrieve the current GitHub API core rate limit status.
+ *
+ * @returns An object with the core rate limit values: `limit` (maximum requests), `remaining` (requests left), `reset` (Date when the limit resets), and `used` (requests consumed)
  */
 export async function getRateLimitStatus(): Promise<{
   limit: number;
@@ -157,7 +169,11 @@ export async function logRateLimit(): Promise<void> {
 }
 
 /**
- * Convert GitHub issue to FeedbackItem format
+ * Convert a GitHub issue object into a FeedbackItem suitable for internal storage and syncing.
+ *
+ * @param issue - GitHub issue object returned by the API
+ * @param repoFullName - Repository full name in "owner/repo" format used to build the feedback id
+ * @returns A FeedbackItem with mapped fields: id, source, external_id, title, body, repo, github_issue_number, github_issue_url, status, metadata (labels, state, comments, created_at, updated_at, author, assignees, milestone), and created_at
  */
 export function issueToFeedbackItem(issue: any, repoFullName: string): FeedbackItem {
   const feedbackId = `github-${repoFullName}-${issue.number}`;
@@ -187,11 +203,11 @@ export function issueToFeedbackItem(issue: any, repoFullName: string): FeedbackI
 }
 
 /**
- * Synchronizes issues from a GitHub repository and reports counts of new, updated, and closed issues.
+ * Synchronizes issues from a GitHub repository and returns counts of new, updated, and closed issues.
  *
- * @param repoConfig - Repository configuration containing `owner`, `repo`, `full_name`, and optional `last_synced`. When `last_synced` is provided, the sync is incremental and only issues updated since that timestamp are considered.
+ * @param repoConfig - Repository configuration with `owner`, `repo`, `full_name`, and optional `last_synced`. When `last_synced` is provided, the sync is incremental and only issues updated since that timestamp are fetched.
  * @returns An object with:
- *  - `new_issues`: number of issues considered new (all open issues on first sync or created since `last_synced`),
+ *  - `new_issues`: number of issues considered new (all open issues on first sync),
  *  - `updated_issues`: number of issues updated since `last_synced` (zero on first sync),
  *  - `closed_issues`: number of issues that are closed in the fetched set,
  *  - `total_issues`: total number of issues fetched (excluding pull requests)

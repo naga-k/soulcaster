@@ -11,6 +11,18 @@ const ecsClient = new ECSClient({
     },
 });
 
+/**
+ * Handles POST requests to trigger the coding agent by verifying or creating a GitHub issue,
+ * optionally creating a backend job record, and starting an ECS Fargate task that runs the agent.
+ *
+ * @param request - Incoming HTTP request with a JSON body. Expected fields (optional): 
+ *   `issue_url` (GitHub issue URL to use), `context` or `issue_description` (issue body),
+ *   `issue_title`, `repo` (repo name), `owner` (repo owner), `repo_url` (Git URL), and `cluster_id`
+ *   (to create a backend tracking job). GitHub authentication (via getGitHubToken) is required
+ *   to verify or create issues.
+ * @returns A JSON HTTP response. On success, returns an object with `success: true`, `message`,
+ *   `taskArn`, and the resolved `issue_url`. On failure, returns an error object with `error`
+ *   and `details` and an appropriate HTTP status code.
 export async function POST(request: Request) {
     try {
         const body = await request.json();
