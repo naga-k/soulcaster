@@ -5,6 +5,13 @@ import type { GitHubRepo } from '@/types';
 
 type SourceType = 'reddit' | 'github';
 
+/**
+ * Render the administration panel for configuring Reddit subreddits and GitHub repositories.
+ *
+ * Loads configured subreddits and repositories on mount and provides actions to add, remove, and persist subreddits; add and remove GitHub repos; trigger per-repo or all-repo syncs; and trigger the Reddit poller.
+ *
+ * @returns The JSX element for the SourceConfig administration panel.
+ */
 export default function SourceConfig() {
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
 
@@ -169,8 +176,10 @@ export default function SourceConfig() {
         throw new Error(data?.error || data?.detail || 'Failed to sync repo');
       }
       await loadRepos();
+      const ignoredCount = data.ignored_prs ?? 0;
       setRepoMessage(
-        `Synced ${fullName}: ${data.new_issues} new, ${data.updated_issues} updated, ${data.closed_issues} closed`
+        `Synced ${fullName}: ${data.new_issues} new, ${data.updated_issues} updated, ${data.closed_issues} closed` +
+        (ignoredCount > 0 ? ` (${ignoredCount} PRs ignored)` : '')
       );
     } catch (err: any) {
       setRepoError(err?.message || 'Failed to sync repository');
@@ -192,8 +201,10 @@ export default function SourceConfig() {
         throw new Error(data?.error || data?.detail || 'Failed to sync repos');
       }
       await loadRepos();
+      const totalIgnored = (data.repos ?? []).reduce((sum: number, repo: any) => sum + (repo.ignored_prs ?? 0), 0);
       setRepoMessage(
-        `Synced all repos: ${data.total_new} new, ${data.total_updated} updated, ${data.total_closed} closed`
+        `Synced all repos: ${data.total_new} new, ${data.total_updated} updated, ${data.total_closed} closed` +
+        (totalIgnored > 0 ? ` (${totalIgnored} PRs ignored)` : '')
       );
     } catch (err: any) {
       setRepoError(err?.message || 'Failed to sync repositories');
@@ -329,7 +340,7 @@ export default function SourceConfig() {
             <div>
               <h4 className="font-semibold text-slate-200">GitHub Repository Issues</h4>
               <p className="text-sm text-slate-400">
-                Sync open & closed issues from public GitHub repos. Uses GitHub API with optional token for higher rate limits.
+                Sync open & closed issues from public GitHub repos. Uses GitHub API with your session token for higher rate limits.
               </p>
             </div>
           </div>
@@ -437,7 +448,7 @@ export default function SourceConfig() {
             {repoMessage && <p className="text-sm text-emerald-400">{repoMessage}</p>}
             {repoError && <p className="text-sm text-rose-400">{repoError}</p>}
             <p className="text-xs text-slate-500">
-              Supports public repos. Set GITHUB_TOKEN for higher rate limits (5000/hr vs 60/hr).
+              Supports public repos. Uses your session token for higher rate limits (5000/hr vs 60/hr).
             </p>
           </div>
         </div>

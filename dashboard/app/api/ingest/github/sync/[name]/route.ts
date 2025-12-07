@@ -9,9 +9,10 @@ const redis = new Redis({
 });
 
 /**
- * POST /api/ingest/github/sync/[name]
- * Sync a specific GitHub repository
- * Name should be URL-encoded "owner/repo" (e.g., "anthropics%2Fclaude-code")
+ * Syncs issues from the specified GitHub repository into Redis and updates repository metadata.
+ *
+ * @param params - An object with a URL-encoded `name` of the repository in the form "owner%2Frepo" (decoded to "owner/repo").
+ * @returns A NextResponse whose JSON body reports the sync result. On success includes `success: true`, `message`, `repo`, `new_issues`, `updated_issues`, `closed_issues`, `total_issues`, and `ignored_prs`. On failure includes `success: false`, `error`, and `detail`.
  */
 export async function POST(
   request: Request,
@@ -54,7 +55,7 @@ export async function POST(
     };
 
     // Fetch issues (incremental if last_synced exists)
-    const issues = await fetchRepoIssues(repo.owner, repo.repo, repo.last_synced);
+    const { issues, prCount } = await fetchRepoIssues(repo.owner, repo.repo, repo.last_synced);
 
     let newCount = 0;
     let updatedCount = 0;
@@ -128,6 +129,7 @@ export async function POST(
       updated_issues: updatedCount,
       closed_issues: closedCount,
       total_issues: issues.length,
+      ignored_prs: prCount,
     });
   } catch (error) {
     console.error('[GitHub Sync] Error during sync:', error);
