@@ -6,9 +6,9 @@ import type { GitHubRepo } from '@/types';
 type SourceType = 'reddit' | 'github';
 
 /**
- * Renders the SourceConfig UI for managing Reddit subreddits and GitHub repositories, including adding, removing, saving, and syncing configured sources.
+ * Render the administration panel for configuring Reddit subreddits and GitHub repositories.
  *
- * Loads subreddit and repository data on mount and interacts with backend APIs to persist subreddit lists, manage GitHub repo configuration, trigger repo syncs (single or all), and trigger the Reddit poller.
+ * Loads configured subreddits and repositories on mount and provides actions to add, remove, and persist subreddits; add and remove GitHub repos; trigger per-repo or all-repo syncs; and trigger the Reddit poller.
  *
  * @returns The JSX element for the SourceConfig administration panel.
  */

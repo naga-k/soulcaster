@@ -59,13 +59,13 @@ def update_job(job_id: str, status: str, logs: str = None, pr_url: str = None):
 
 def run_command(command, cwd=None, capture_output=True, env=None):
     """
-    Execute a shell command and return its standard output.
+    Run a shell command and return its standard output.
     
     Parameters:
-        command (str): The shell command to run.
-        cwd (str | None): Directory to run the command in; uses the current working directory if None.
-        capture_output (bool): If True, capture and return stdout/stderr output; if False, output is not captured and an empty string is returned.
-        env (Mapping[str, str] | None): Environment variables for the command; defaults to the current process environment.
+        command (str): Shell command to execute.
+        cwd (str | None): Working directory for the command; uses the current process cwd if None.
+        capture_output (bool): If True, capture and return stdout (and stderr for logging); if False, output is not captured and an empty string is returned.
+        env (Mapping[str, str] | None): Environment variables for the subprocess; uses the current process environment if None.
     
     Returns:
         str: The command's stdout with surrounding whitespace removed; returns an empty string if there is no output or if output capture is disabled.
@@ -100,13 +100,16 @@ def run_command(command, cwd=None, capture_output=True, env=None):
 
 def parse_issue_url(url):
     """
-    Extract owner, repository name, and issue number from a GitHub issue URL.
+    Extract the owner, repository name, and issue number from a GitHub issue URL.
+    
+    Parameters:
+        url (str): A GitHub issue URL in the form "https://github.com/<owner>/<repo>/issues/<number>".
     
     Returns:
-        tuple: (owner, repo, issue_number) where each element is a string.
+        tuple: `(owner, repo, issue_number)` — each element is a string.
     
     Raises:
-        ValueError: If the provided URL does not match the expected GitHub issue pattern.
+        ValueError: If `url` does not match the expected GitHub issue pattern.
     """
     # Format: https://github.com/owner/repo/issues/number
     match = re.search(r"github\.com/([^/]+)/([^/]+)/issues/(\d+)", url)
@@ -133,10 +136,17 @@ def get_github_username() -> str:
 
 def ensure_fork(owner_name: str, repo_name: str) -> str:
     """
-    Ensure a fork of the specified repository exists for the authenticated GitHub user, creating a uniquely named fork if one is not already present.
+    Ensure the authenticated user has a fork of the specified repository, creating a uniquely named fork if one does not already exist.
+    
+    Parameters:
+        owner_name (str): Owner of the original repository (e.g., "octocat").
+        repo_name (str): Name of the original repository (e.g., "hello-world").
     
     Returns:
-        (username, fork_name): the authenticated user's GitHub username and the existing or newly created fork repository name.
+        tuple: (username, fork_name) where `username` is the authenticated GitHub username and `fork_name` is the existing or newly created fork repository name.
+    
+    Raises:
+        Exception: If fork creation fails or the created fork is not accessible after retries.
     """
     username = get_github_username()
     # Add random suffix to ensure uniqueness
@@ -540,9 +550,9 @@ def apply_patches_from_markdown(markdown_text, cwd):
 
 def main():
     """
-    Entry point that orchestrates execution: loads environment, parses CLI arguments, runs the agent logic, and reports status to the backend.
+    Orchestrates the CLI workflow to fix a GitHub issue and report progress to the backend.
     
-    Parses an issue URL and optional job ID from the command line, sets the backend job to "running", invokes the core agent workflow to create a fix (returning a PR URL on success), and updates the backend job to "success" with collected logs and the PR URL. On any exception, logs a critical failure, updates the backend job to "failed" with logs, and exits the process with code 1.
+    Loads environment variables, parses command-line arguments (issue URL and optional job ID), marks the backend job as "running", invokes the core agent workflow to produce a fix and obtain a PR URL, and updates the backend job to "success" with collected logs and the PR URL. If an exception occurs, logs the failure, updates the backend job to "failed" with logs, and exits the process with status code 1.
     """
     load_dotenv()  # Load API keys from .env
     
