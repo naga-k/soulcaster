@@ -7,7 +7,7 @@ This directory contains test scripts for the Dashboard API.
 This script tests the `/api/trigger-agent` endpoint, which is responsible for triggering the backend coding agent (ECS task). It supports two modes:
 
 1.  **Trigger with Existing Issue URL**:
-    Validates that the issue exists (if `GITHUB_TOKEN` is configured) and triggers the agent.
+    Validates that the issue exists and triggers the agent.
     ```bash
     ./test_trigger.sh https://github.com/owner/repo/issues/123
     ```
