@@ -177,8 +177,8 @@ def ensure_fork(owner_name: str, repo_name: str) -> str:
             if result and result.strip():
                 log(f"Fork exists despite error - proceeding")
                 return username, fork_name
-        except:
-            pass
+        except Exception as verify_error:
+            log(f"Failed to verify fork existence after fork command error: {verify_error}")
         raise
     
     # Verify fork was created via REST API
