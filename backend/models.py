@@ -7,12 +7,27 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class User(BaseModel):
+    id: UUID
+    email: Optional[str] = None
+    github_id: Optional[str] = None
+    created_at: datetime
+
+
+class Project(BaseModel):
+    id: UUID
+    user_id: UUID
+    name: str
+    created_at: datetime
+
+
 class AgentJob(BaseModel):
     """
     Represents a background job for the coding agent.
     """
 
     id: UUID
+    project_id: UUID
     cluster_id: str
     status: Literal["pending", "running", "success", "failed"]
     logs: Optional[str] = None
@@ -27,18 +42,10 @@ class FeedbackItem(BaseModel):
 
     This model normalizes feedback from different sources (Reddit, Sentry, manual)
     into a consistent schema for processing by the FeedbackAgent system.
-
-    Attributes:
-        id: Unique identifier for this feedback item
-        source: The origin of the feedback (reddit, sentry, or manual)
-        external_id: ID from the original source system (e.g., Reddit post ID)
-        title: Short summary or title (max 80 chars for manual entries)
-        body: Full text content of the feedback
-        metadata: Source-specific data (subreddit, stack traces, etc.)
-        created_at: Timestamp when the feedback was created
     """
 
     id: UUID
+    project_id: UUID
     source: Literal["reddit", "sentry", "manual"]
     external_id: Optional[str] = None
     title: str

@@ -13,9 +13,9 @@ from uuid import UUID
 import requests
 
 try:
-    from .models import FeedbackItem, IssueCluster, AgentJob
+    from .models import FeedbackItem, IssueCluster, AgentJob, Project, User
 except ImportError:
-    from models import FeedbackItem, IssueCluster, AgentJob
+    from models import FeedbackItem, IssueCluster, AgentJob, Project, User
 
 try:
     import redis  # type: ignore
@@ -138,12 +138,16 @@ class InMemoryStore:
         self.feedback_items: Dict[UUID, FeedbackItem] = {}
         self.issue_clusters: Dict[UUID, IssueCluster] = {}
         self.agent_jobs: Dict[UUID, AgentJob] = {}
+        self.projects: Dict[UUID, Project] = {}
+        self.users: Dict[UUID, User] = {}
         self.reddit_subreddits: Optional[List[str]] = None
         self.external_index: Dict[Tuple[str, str], UUID] = {}
         self.unclustered_feedback_ids: set[UUID] = set()  # Phase 1: track unclustered items
 
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
+        if item.project_id not in self.projects:
+            raise KeyError("project not found")
         if item.external_id:
             key = (item.source, item.external_id)
             existing_id = self.external_index.get(key)
@@ -207,6 +211,8 @@ class InMemoryStore:
 
     # Jobs
     def add_job(self, job: AgentJob) -> AgentJob:
+        if job.project_id not in self.projects:
+            raise KeyError("project not found")
         self.agent_jobs[job.id] = job
         return job
 
@@ -236,6 +242,22 @@ class InMemoryStore:
         if not item_id:
             return None
         return self.feedback_items.get(item_id)
+
+    # Users / Projects
+    def create_user_with_default_project(self, user: User, default_project: Project) -> Project:
+        self.users[user.id] = user
+        self.projects[default_project.id] = default_project
+        return default_project
+
+    def create_project(self, project: Project) -> Project:
+        self.projects[project.id] = project
+        return project
+
+    def get_projects_for_user(self, user_id: UUID) -> List[Project]:
+        return [p for p in self.projects.values() if p.user_id == user_id]
+
+    def get_project(self, project_id: UUID) -> Optional[Project]:
+        return self.projects.get(project_id)
 
 
 class RedisStore:
@@ -778,3 +800,20 @@ def remove_from_unclustered(feedback_id: UUID):
         feedback_id: UUID of the feedback item to remove from unclustered set.
     """
     return _STORE.remove_from_unclustered(feedback_id)
+
+
+# User / Project API
+def create_user_with_default_project(user: User, project: Project) -> Project:
+    return _STORE.create_user_with_default_project(user, project)
+
+
+def create_project(project: Project) -> Project:
+    return _STORE.create_project(project)
+
+
+def get_projects_for_user(user_id: UUID) -> List[Project]:
+    return _STORE.get_projects_for_user(user_id)
+
+
+def get_project(project_id: UUID) -> Optional[Project]:
+    return _STORE.get_project(project_id)
