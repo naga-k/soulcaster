@@ -322,6 +322,18 @@ class RedisStore:
     def _cluster_jobs_key(cluster_id: str) -> str:
         return f"cluster:jobs:{cluster_id}"
 
+    @staticmethod
+    def _user_key(user_id: UUID) -> str:
+        return f"user:{user_id}"
+
+    @staticmethod
+    def _project_key(project_id: UUID) -> str:
+        return f"project:{project_id}"
+
+    @staticmethod
+    def _user_projects_key(user_id: UUID) -> str:
+        return f"user:projects:{user_id}"
+
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
         payload = item.model_dump()
@@ -621,6 +633,49 @@ class RedisStore:
             return self.get_feedback_item(UUID(existing_id))
         except ValueError:
             return None
+
+    # Users / Projects
+    def create_user_with_default_project(self, user: User, default_project: Project) -> Project:
+        payload = user.model_dump()
+        if isinstance(payload.get("created_at"), datetime):
+            payload["created_at"] = _dt_to_iso(payload["created_at"])
+
+        hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+        self._hset(self._user_key(user.id), hash_payload)
+
+        return self.create_project(default_project)
+
+    def create_project(self, project: Project) -> Project:
+        payload = project.model_dump()
+        if isinstance(payload.get("created_at"), datetime):
+            payload["created_at"] = _dt_to_iso(payload["created_at"])
+
+        hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+        self._hset(self._project_key(project.id), hash_payload)
+        self._sadd(self._user_projects_key(project.user_id), str(project.id))
+        return project
+
+    def get_projects_for_user(self, user_id: UUID) -> List[Project]:
+        project_ids = self._smembers(self._user_projects_key(user_id))
+        projects: List[Project] = []
+        for pid in project_ids:
+            try:
+                project = self.get_project(UUID(pid))
+            except ValueError:
+                continue
+            if project:
+                projects.append(project)
+        return projects
+
+    def get_project(self, project_id: UUID) -> Optional[Project]:
+        data = self._hgetall(self._project_key(project_id))
+        if not data:
+            return None
+
+        if isinstance(data.get("created_at"), str):
+            data["created_at"] = _iso_to_dt(data["created_at"])
+
+        return Project(**data)
 
     # --- client wrappers ---
     def _set(self, key: str, value: str):
