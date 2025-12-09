@@ -198,6 +198,7 @@ async function createSingletonClusters(
  * Performs optimized clustering using existing clusters and unclustered feedback: regenerates summaries only for changed clusters, batches all Redis writes in a single pipeline, caches fetched feedback, updates centroids incrementally, and falls back to creating singleton clusters for items that could not be clustered.
  *
  * @returns A JSON response: on success includes clustering metrics (`clustered`, `newClusters`, `updatedClusters`, `skippedClusters`, `failedEmbeddings`, `missingFeedback`, `durationMs`); if `project_id` is missing returns a 400 with an `error` message; other failures return a 500 with `error` and `details`.
+ */
 export async function POST(request: Request) {
   try {
     const projectId = await requireProjectId(request);
