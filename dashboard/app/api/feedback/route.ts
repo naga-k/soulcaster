@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFeedback } from '@/lib/redis';
+import { requireProjectId } from '@/lib/project';
 
+/**
+ * Retrieve feedback entries for the project identified in the request.
+ *
+ * @returns A JSON response containing the feedback payload from Redis on success; a 400 JSON error when `limit` or `offset` are invalid or when the project ID is missing; or a 500 JSON error when fetching fails.
+ */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const projectId = await requireProjectId(request);
+
     const source = searchParams.get('source');
     const repo = searchParams.get('repo');
     const limitParam = searchParams.get('limit') || '100';
@@ -30,17 +38,29 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(offsetNum, 0);
 
     // Fetch from Redis
-    const data = await getFeedback(limit, offset, source || undefined, repo || undefined);
+    const data = await getFeedback(projectId, limit, offset, source || undefined, repo || undefined);
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'project_id is required') {
+      return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
+    }
     console.error('Error fetching feedback from Redis:', error);
     return NextResponse.json({ error: 'Failed to fetch feedback' }, { status: 500 });
   }
 }
 
+/**
+ * Update an existing feedback entry for the authorized project.
+ *
+ * Attempts to update feedback identified by `id` with the provided data for the project derived from the request.
+ *
+ * @returns A `NextResponse` containing `{ success: true }` on successful update. On failure returns a JSON error message with HTTP status 400 when the project ID or feedback `id` is missing, or 500 for other server errors.
+ */
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    const projectId = await requireProjectId(request);
+
     const { id, ...data } = body;
 
     if (!id) {
@@ -50,10 +70,13 @@ export async function PUT(request: NextRequest) {
     // Import dynamically to avoid circular dependencies if any, though not expected here
     const { updateFeedback } = await import('@/lib/redis');
 
-    await updateFeedback(id, data);
+    await updateFeedback(projectId, id, data);
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'project_id is required') {
+      return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
+    }
     console.error('Error updating feedback:', error);
     return NextResponse.json({ error: 'Failed to update feedback' }, { status: 500 });
   }
