@@ -346,14 +346,15 @@ const ai = new GoogleGenAI({ apiKey });
 /**
  * Generate embedding for feedback text
  *
- * Uses text-embedding-004 with explicit 768 dimensions to match Upstash Vector index.
- * Note: gemini-embedding-001 was returning 3072 dims which doesn't match our index.
+ * Uses gemini-embedding-001 with explicit 768 dimensions to stay compatible
+ * with the existing Upstash Vector index. Keep the outputDimensionality and
+ * dimension guard in sync with the index size to avoid recreating the schema.
  */
 export async function generateFeedbackEmbedding(feedback: FeedbackItem): Promise<number[]> {
   const text = `Title: ${feedback.title || ''}\nBody: ${feedback.body || ''}`.trim();
 
   const response = await ai.models.embedContent({
-    model: 'text-embedding-004',
+    model: 'gemini-embedding-001',
     contents: [text],
     config: {
       outputDimensionality: 768,
