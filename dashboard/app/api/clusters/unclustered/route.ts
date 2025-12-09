@@ -8,7 +8,7 @@ import { requireProjectId } from '@/lib/project';
  */
 export async function GET(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const count = await getUnclusteredCount(projectId);
     return NextResponse.json({ count });
   } catch (error: any) {

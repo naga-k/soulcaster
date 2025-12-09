@@ -11,7 +11,7 @@ import { requireProjectId } from '@/lib/project';
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
 
     // Validate ID format (UUID or numeric)
     if (!id || !/^[a-zA-Z0-9-]+$/.test(id)) {

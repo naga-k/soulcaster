@@ -4,7 +4,7 @@ import { requireProjectId } from '@/lib/project';
 
 export async function GET(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const stats = await getStats(projectId);
     return NextResponse.json(stats);
   } catch (error: any) {

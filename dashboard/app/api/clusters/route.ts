@@ -9,7 +9,7 @@ import { requireProjectId } from '@/lib/project';
  */
 export async function GET(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const clusters = await getClusters(projectId);
     return NextResponse.json(clusters);
   } catch (error: any) {

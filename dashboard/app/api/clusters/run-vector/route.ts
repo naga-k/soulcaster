@@ -74,7 +74,7 @@ interface ClusterSummaryData {
  */
 export async function POST(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     console.log('[Vector Clustering] Starting vector-based clustering...');
     const startTime = Date.now();
 

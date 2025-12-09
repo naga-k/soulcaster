@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
+import { randomUUID } from 'crypto';
 import { getUnclusteredFeedbackIds, getFeedbackItem, getClusterIds } from '@/lib/redis';
 import {
   clusterFeedbackBatchOptimized,
@@ -111,6 +112,68 @@ async function executeBatchedRedisOperations(
   await pipeline.exec();
 }
 
+async function createSingletonClusters(
+  projectId: string,
+  feedbackItems: FeedbackItem[],
+  removeFromUnclustered: Set<string>
+) {
+  if (feedbackItems.length === 0) return { created: 0 };
+
+  const pipeline = redis.pipeline();
+  const timestamp = new Date().toISOString();
+
+  const summaries = await Promise.all(
+    feedbackItems.map(async (item) => {
+      try {
+        return await generateClusterSummary([item]);
+      } catch (error) {
+        console.error('[Clustering] Failed to generate summary for singleton cluster', error);
+        return {
+          title: item.title || 'Feedback',
+          summary: item.body?.substring(0, 120) || 'Single feedback item',
+          issueTitle: item.title || 'Feedback',
+          issueDescription: item.body || 'Single feedback item',
+          repoUrl: item.github_repo_url,
+        };
+      }
+    })
+  );
+
+  feedbackItems.forEach((item, idx) => {
+    const clusterId = randomUUID();
+    const summary = summaries[idx];
+
+    const payload: Record<string, string> = {
+      id: clusterId,
+      title: summary.title,
+      summary: summary.summary,
+      status: 'new',
+      created_at: timestamp,
+      updated_at: timestamp,
+      centroid: '[]', // no embedding, but keep consistent shape
+    };
+
+    if (summary.issueTitle) payload.issue_title = summary.issueTitle;
+    if (summary.issueDescription) payload.issue_description = summary.issueDescription;
+    if (summary.repoUrl) payload.github_repo_url = summary.repoUrl;
+
+    pipeline.hset(clusterKey(projectId, clusterId), payload);
+    pipeline.sadd(clusterAllKey(projectId), clusterId);
+
+    // Cluster items (singleton)
+    pipeline.del(clusterItemsKey(projectId, clusterId));
+    pipeline.sadd(clusterItemsKey(projectId, clusterId), item.id);
+
+    // Mark feedback as clustered and remove from unclustered
+    pipeline.hset(feedbackKey(projectId, item.id), { clustered: 'true' });
+    pipeline.srem(feedbackUnclusteredKey(projectId), item.id);
+    removeFromUnclustered.add(item.id);
+  });
+
+  await pipeline.exec();
+  return { created: feedbackItems.length };
+}
+
 /**
  * Run clustering on unclustered feedback items
  * POST /api/clusters/run
@@ -123,7 +186,7 @@ async function executeBatchedRedisOperations(
  */
 export async function POST(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     console.log('[Clustering] Starting optimized clustering job...');
     const startTime = Date.now();
 
@@ -283,14 +346,30 @@ export async function POST(request: Request) {
       idsToRemoveFromUnclustered
     );
 
+    // Fallback: if some feedback items weren't clustered (e.g., embedding failures),
+    // ensure they still become singleton clusters so the UI never shows "no clusters".
+    const processedIds = new Set(results.map((r) => r.feedbackId));
+    const unprocessedFeedback = validFeedback.filter((item) => !processedIds.has(item.id));
+    let fallbackCreated = 0;
+
+    if (unprocessedFeedback.length > 0) {
+      console.log(`[Clustering] Creating ${unprocessedFeedback.length} singleton clusters (fallback)`);
+      const { created } = await createSingletonClusters(
+        projectId,
+        unprocessedFeedback,
+        idsToRemoveFromUnclustered
+      );
+      fallbackCreated = created;
+    }
+
     const duration = Date.now() - startTime;
     console.log(`[Clustering] Clustering complete in ${duration}ms`);
 
     return NextResponse.json({
       success: true,
       message: 'Clustering completed successfully',
-      clustered: results.length,
-      newClusters: newClusterIds.size,
+      clustered: results.length + fallbackCreated,
+      newClusters: newClusterIds.size + fallbackCreated,
       updatedClusters: changedClusterIds.size - newClusterIds.size,
       skippedClusters: allClusters.length - changedClusterIds.size,
       failedEmbeddings: failedEmbeddingCount,

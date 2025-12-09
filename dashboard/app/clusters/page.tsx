@@ -159,6 +159,33 @@ export default function ClustersListPage() {
             </Link>
             .
           </p>
+          <p className="mt-4 text-sm text-purple-700">
+            {unclusteredCount > 0
+              ? `${unclusteredCount} unclustered feedback item${unclusteredCount === 1 ? '' : 's'} ready to group.`
+              : 'No unclustered feedback detected yet.'}
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={triggerClustering}
+              disabled={isClustering}
+              className={`w-full sm:w-auto px-6 py-3 border border-transparent text-sm font-bold rounded-full shadow-neon-green text-black bg-matrix-green hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-matrix-green disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wide ${isClustering ? 'animate-pulse' : ''
+                }`}
+            >
+              {isClustering ? 'Running AI Clustering...' : 'Run Clustering'}
+            </button>
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className={`w-full sm:w-auto px-6 py-3 border border-purple-200 text-sm font-semibold rounded-full text-purple-900 bg-white hover:bg-purple-50 transition-all ${showConfig ? 'ring-2 ring-purple-200' : ''
+                }`}
+            >
+              {showConfig ? 'Hide Source Settings' : 'Configure Sources'}
+            </button>
+          </div>
+          {showConfig && (
+            <div className="mt-6 text-left">
+              <SourceConfig />
+            </div>
+          )}
         </div>
       </div>
     );

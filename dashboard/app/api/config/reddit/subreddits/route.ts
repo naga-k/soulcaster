@@ -4,7 +4,7 @@ import { requireProjectId } from '@/lib/project';
 
 export async function GET(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const subreddits = await getRedditSubreddits(projectId);
     return NextResponse.json({ subreddits });
   } catch (error: any) {
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const payload = await request.json();
     const { subreddits } = payload;
 

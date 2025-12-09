@@ -4,7 +4,7 @@ import { requireProjectId } from '@/lib/project';
 
 export async function POST(request: NextRequest) {
   try {
-    const projectId = requireProjectId(request);
+    const projectId = await requireProjectId(request);
     const body = await request.json();
 
     if (!body.text || typeof body.text !== 'string') {
