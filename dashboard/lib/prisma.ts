@@ -1,15 +1,20 @@
-import type { PrismaClient as PrismaClientType } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
-type PrismaClientConstructor = typeof import('@prisma/client').PrismaClient;
+type PrismaClientConstructor = new (...args: unknown[]) => any;
+type PrismaClientInstance = InstanceType<PrismaClientConstructor>;
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientInstance };
 
 function isMissingPrismaClient(error: unknown): error is NodeJS.ErrnoException {
+  if (!(error instanceof Error)) return false;
+
+  const code = (error as NodeJS.ErrnoException).code;
+  const message = error.message ?? '';
+
   return (
-    error instanceof Error &&
-    'code' in (error as NodeJS.ErrnoException) &&
-    (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND'
+    code === 'MODULE_NOT_FOUND' ||
+    code === 'ERR_MODULE_NOT_FOUND' ||
+    message.includes('.prisma/client')
   );
 }
 
