@@ -13,7 +13,7 @@ class AgentJob(BaseModel):
     """
 
     id: UUID
-    project_id: str  # Supports both UUID and CUID formats from dashboard
+    project_id: Union[str, UUID]  # Supports both UUID and CUID formats
     cluster_id: str
     status: Literal["pending", "running", "success", "failed"]
     logs: Optional[str] = None
@@ -41,7 +41,7 @@ class FeedbackItem(BaseModel):
     """
 
     id: UUID
-    project_id: str  # Supports both UUID and CUID formats from dashboard
+    project_id: Union[str, UUID]  # Supports both UUID and CUID formats
     source: Literal["reddit", "sentry", "manual", "github"]
     external_id: Optional[str] = None
     title: str
@@ -70,7 +70,7 @@ class IssueCluster(BaseModel):
     """Represents a cluster of related feedback items."""
 
     id: str
-    project_id: str  # Supports both UUID and CUID formats from dashboard
+    project_id: Union[str, UUID]  # Supports both UUID and CUID formats
     title: str
     summary: str
     feedback_ids: List[str]
@@ -90,7 +90,7 @@ class IssueCluster(BaseModel):
 class User(BaseModel):
     """Represents an authenticated user."""
 
-    id: str  # Supports both UUID and CUID formats from dashboard
+    id: Union[str, UUID]  # Supports both UUID and CUID formats
     email: Optional[str] = None
     github_id: Optional[str] = None
     created_at: datetime
@@ -99,7 +99,7 @@ class User(BaseModel):
 class Project(BaseModel):
     """Represents a project/workspace owned by a user."""
 
-    id: str  # Supports both UUID and CUID formats from dashboard
-    user_id: str
+    id: Union[str, UUID]  # Supports both UUID and CUID formats
+    user_id: Union[str, UUID]
     name: str
     created_at: datetime

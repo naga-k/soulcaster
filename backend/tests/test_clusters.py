@@ -3,9 +3,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from backend.main import app
-from backend.models import FeedbackItem, IssueCluster
-from backend.store import (
+from main import app
+from models import FeedbackItem, IssueCluster
+from store import (
     add_cluster,
     add_feedback_item,
     clear_clusters,

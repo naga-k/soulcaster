@@ -215,6 +215,9 @@ Today's implementation (via `backend/store.py` and dashboard helpers) uses a **g
   - There is a single global job space; jobs are linked to clusters via `cluster_id` only.
 - Config:
   - Reddit subreddits are global, not per project.
+- Access patterns:
+  - Dashboard API routes now proxy feedback/clusters/stats/config through the backend; backend is the single source of truth for these reads/writes.
+  - Vector clustering routes (`/api/clusters/run`, `/api/clusters/run-vector`) still touch Redis/Vector directly (legacy path).
 
 This works for a single demo or sandbox but is **not** tenant‑safe: every user/project shares the same keyspace.
 

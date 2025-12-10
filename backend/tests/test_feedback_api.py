@@ -4,9 +4,9 @@ from uuid import uuid4
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
-from backend.main import app
-from backend.store import clear_feedback_items, add_feedback_item, clear_clusters
-from backend.models import FeedbackItem
+from main import app
+from store import clear_feedback_items, add_feedback_item, clear_clusters
+from models import FeedbackItem
 
 client = TestClient(app)
 

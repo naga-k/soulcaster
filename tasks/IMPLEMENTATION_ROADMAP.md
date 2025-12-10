@@ -100,11 +100,12 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
 **Reference:** `documentation/api_workers_architecture_plan.md` Phase 1
 
 ### Backend API (Read/Write)
-- [ ] **File: `backend/main.py`**
-  - [ ] Ensure these endpoints exist and work:
+- [x] **File: `backend/main.py`**
+  - [x] Ensure these endpoints exist and work:
     - `GET /feedback` → list all feedback
     - `GET /feedback/{id}` → single item
     - `POST /feedback` → manual ingestion
+    - `PUT /feedback/{id}` → update feedback
     - `GET /clusters` → list clusters
     - `GET /clusters/{id}` → single cluster
     - `POST /clusters/{id}/start_fix` → trigger agent (backend owns this)
@@ -119,11 +120,10 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
   - [ ] Add `update_cluster_pr_url(cluster_id, pr_url)` if missing
 
 ### Dashboard API (Proxy Only)
-- [ ] **Files: `dashboard/app/api/**/route.ts`**
-  - [ ] Review all route handlers
-  - [ ] Identify which ones write directly to Redis (anti-pattern)
-  - [ ] Plan migration: these should call backend endpoints instead
-  - [ ] Document current state in comments: `// TODO: Should proxy to backend POST /feedback`
+- [x] **Files: `dashboard/app/api/**/route.ts`**
+  - [x] Review all route handlers
+  - [x] Identify which ones write directly to Redis (anti-pattern)
+  - [x] Migrate: proxy feedback/clusters/stats/Reddit config to backend endpoints
 
 ### Acceptance Criteria
 - ✅ Backend owns all writes to Redis

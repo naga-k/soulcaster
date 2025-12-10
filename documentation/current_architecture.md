@@ -286,25 +286,12 @@ This section expands the high-level overview into more implementation detail so 
 
 ### Dashboard service (Next.js)
 
-- Reads Redis directly via `dashboard/lib/redis.ts`:
-  - `getClusters()`:
-    - `smembers('clusters:all')` → for each cluster ID:
-      - `hgetall('cluster:{id}')` for metadata.
-      - `smembers('cluster:items:{id}')` for `feedback_ids`.
-      - `getFeedbackItem(fid)` to hydrate individual feedback items.
-    - Aggregates `sources` and per-cluster `repos` from feedback.
-  - `getClusterDetail(id)`:
-    - Same pattern, but for a single cluster.
-  - `getFeedback(limit, offset, source?, repo?)`:
-    - Uses `zrange('feedback:created'...)` or `zrange('feedback:source:{source}'...)` with `rev: true` for newest-first ordering.
-  - `getStats()`:
-    - Uses `zcard`/`scard` on existing sorted sets and the `clusters:all` set.
+- Proxies feedback/clusters/stats and Reddit config to the backend; backend is the single source of truth for those reads/writes.
+- Vector clustering routes (`/api/clusters/run`, `/api/clusters/run-vector`) still talk directly to Upstash Redis/Vector for embeddings and batch writes (legacy path).
 
 **API routes**
-- `GET /api/clusters`:
-  - Thin wrapper around `getClusters()`, returns JSON directly to the UI.
-- `GET /api/clusters/[id]`:
-  - Uses `getClusterDetail(id)`; no backend hop.
+- `GET /api/clusters`, `GET /api/clusters/[id]`, `GET /api/feedback`, `PUT /api/feedback`, `GET /api/stats`, `GET/POST /api/config/reddit/subreddits`:
+  - Proxy to backend (`NEXT_PUBLIC_BACKEND_URL`) with `project_id`.
 - `POST /api/clusters/[id]/start_fix`:
   - Fetches cluster from backend (`GET {BACKEND_URL}/clusters/{id}`) to leverage backend’s notion of cluster fields.
   - Deduces repo owner/name from `github_repo_url` or defaults (for manual clusters).

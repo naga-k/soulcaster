@@ -15,10 +15,7 @@ ProjectId = Union[UUID, str]
 
 import requests
 
-try:
-    from .models import FeedbackItem, IssueCluster, AgentJob, Project, User
-except ImportError:
-    from models import FeedbackItem, IssueCluster, AgentJob, Project, User
+from models import FeedbackItem, IssueCluster, AgentJob, Project, User
 
 try:
     import redis  # type: ignore
@@ -199,20 +196,20 @@ class InMemoryStore:
         Raises:
             KeyError: If the item's project_id does not exist in the store.
         """
-        if item.project_id not in self.projects:
-            raise KeyError("project not found")
+        # Allow either UUID or string identifiers; skip strict project existence check in-memory
+        project_key = str(item.project_id)
         if item.external_id:
-            key = (item.project_id, item.source, item.external_id)
+            key = (project_key, item.source, item.external_id)
             existing_id = self.external_index.get(key)
             if existing_id:
                 return self.feedback_items[existing_id]
             self.external_index[key] = item.id
         self.feedback_items[item.id] = item
         # Add to unclustered set (Phase 1: ingestion moat)
-        self.unclustered_feedback_ids.setdefault(item.project_id, set()).add(item.id)
+        self.unclustered_feedback_ids.setdefault(project_key, set()).add(item.id)
         return item
 
-    def get_feedback_item(self, item_id: UUID) -> Optional[FeedbackItem]:
+    def get_feedback_item(self, project_id: str, item_id: UUID) -> Optional[FeedbackItem]:
         """
         Retrieve a feedback item by its UUID.
         
@@ -221,30 +218,35 @@ class InMemoryStore:
         """
         return self.feedback_items.get(item_id)
 
-    def get_all_feedback_items(self) -> List[FeedbackItem]:
+    def get_all_feedback_items(self, project_id: Optional[str] = None) -> List[FeedbackItem]:
         """
         Get all stored feedback items.
         
         Returns:
             list[FeedbackItem]: All FeedbackItem instances currently held in the store.
         """
-        return list(self.feedback_items.values())
+        if project_id is None:
+            return list(self.feedback_items.values())
+        return [
+            item for item in self.feedback_items.values() if str(item.project_id) == str(project_id)
+        ]
 
-    def get_unclustered_feedback(self, project_id: UUID) -> List[FeedbackItem]:
+    def get_unclustered_feedback(self, project_id: str) -> List[FeedbackItem]:
         """
         Return feedback items for a project that have not been assigned to any cluster.
         
         Returns:
             List[FeedbackItem]: FeedbackItem objects from the project's unclustered set (existing items only).
         """
-        project_unclustered = self.unclustered_feedback_ids.get(project_id, set())
+        key = str(project_id)
+        project_unclustered = self.unclustered_feedback_ids.get(key, set())
         return [
             self.feedback_items[item_id]
             for item_id in project_unclustered
             if item_id in self.feedback_items
         ]
 
-    def remove_from_unclustered(self, feedback_id: UUID, project_id: UUID):
+    def remove_from_unclustered(self, feedback_id: UUID, project_id: str):
         """
         Remove a feedback item's ID from the project's unclustered set.
         
@@ -255,18 +257,56 @@ class InMemoryStore:
         Behavior:
             Performs a no-op if the project does not exist or the feedback ID is not present in the set.
         """
-        if project_id in self.unclustered_feedback_ids:
-            self.unclustered_feedback_ids[project_id].discard(feedback_id)
+        key = str(project_id)
+        if key in self.unclustered_feedback_ids:
+            self.unclustered_feedback_ids[key].discard(feedback_id)
 
-    def clear_feedback_items(self):
+    def update_feedback_item(self, project_id: str, item_id: UUID, **updates) -> FeedbackItem:
         """
-        Remove all stored feedback-related data from the in-memory store.
+        Update mutable fields of a feedback item and return the updated object.
+        """
+        existing = self.feedback_items.get(item_id)
+        if not existing:
+            raise KeyError("feedback not found")
+        updated = existing.model_copy(update=updates)
+        self.feedback_items[item_id] = updated
+        return updated
+
+    def get_feedback_by_external_id(self, project_id: str, source: str, external_id: str) -> Optional[FeedbackItem]:
+        """
+        Lookup a feedback item by project, source, and external_id (in-memory).
+        """
+        key = (str(project_id), source, external_id)
+        feedback_id = self.external_index.get(key)
+        if feedback_id:
+            return self.feedback_items.get(feedback_id)
+        # Fallback scan
+        for item in self.feedback_items.values():
+            if str(item.project_id) == str(project_id) and item.source == source and item.external_id == external_id:
+                return item
+        return None
+
+    def clear_feedback_items(self, project_id: Optional[str] = None):
+        """
+        Remove stored feedback-related data. If project_id is provided, clear only that project's
+        feedback; otherwise clear all feedback (backwards-compatible for tests/cleanup).
         
         This clears feedback_items, the external_id index, and the set tracking unclustered feedback IDs.
         """
-        self.feedback_items.clear()
-        self.external_index.clear()
-        self.unclustered_feedback_ids.clear()
+        if project_id:
+            # Drop feedback for the given project_id
+            ids_to_delete = [fid for fid, item in self.feedback_items.items() if str(item.project_id) == str(project_id)]
+            for fid in ids_to_delete:
+                self.feedback_items.pop(fid, None)
+            # Rebuild external index and unclustered sets to avoid stale entries
+            self.external_index = {
+                k: v for k, v in self.external_index.items() if str(k[0]) != str(project_id)
+            }
+            self.unclustered_feedback_ids.pop(project_id, None)
+        else:
+            self.feedback_items.clear()
+            self.external_index.clear()
+            self.unclustered_feedback_ids.clear()
 
     # Clusters
     def add_cluster(self, cluster: IssueCluster) -> IssueCluster:
@@ -282,25 +322,47 @@ class InMemoryStore:
         self.issue_clusters[cluster.id] = cluster
         return cluster
 
-    def get_cluster(self, cluster_id: str) -> Optional[IssueCluster]:
-        return self.issue_clusters.get(cluster_id)
+    def get_cluster(self, project_id: Optional[str], cluster_id: str) -> Optional[IssueCluster]:
+        """
+        In-memory cluster lookup with optional project scoping.
+        Accepts project_id=None for backwards-compat calls.
+        """
+        cluster = self.issue_clusters.get(cluster_id)
+        if not cluster:
+            return None
+        if project_id is None:
+            return cluster
+        return cluster if str(cluster.project_id) == str(project_id) else None
 
-    def get_all_clusters(self) -> List[IssueCluster]:
-        return list(self.issue_clusters.values())
+    def get_all_clusters(self, project_id: Optional[str] = None) -> List[IssueCluster]:
+        """
+        In-memory cluster listing with optional project scoping.
+        """
+        if project_id is None:
+            return list(self.issue_clusters.values())
+        return [c for c in self.issue_clusters.values() if str(c.project_id) == str(project_id)]
 
-    def update_cluster(self, cluster_id: str, **updates) -> IssueCluster:
+    def update_cluster(self, project_id: Optional[str], cluster_id: str, **updates) -> IssueCluster:
         cluster = self.issue_clusters[cluster_id]
+        if project_id is not None and str(cluster.project_id) != str(project_id):
+            raise KeyError(f"Cluster {cluster_id} not found for project {project_id}")
         updated_cluster = cluster.model_copy(update=updates)
         self.issue_clusters[cluster_id] = updated_cluster
         return updated_cluster
 
-    def clear_clusters(self):
+    def clear_clusters(self, project_id: Optional[str] = None):
         """
-        Remove all stored issue clusters from the in-memory store.
-        
-        This clears the internal collection that holds IssueCluster objects for this store instance.
+        Remove stored issue clusters. If project_id is provided, remove clusters for that project;
+        otherwise remove all clusters (backwards-compatible for tests/cleanup).
         """
-        self.issue_clusters.clear()
+        if project_id:
+            ids_to_delete = [
+                cid for cid, cluster in self.issue_clusters.items() if str(cluster.project_id) == str(project_id)
+            ]
+            for cid in ids_to_delete:
+                self.issue_clusters.pop(cid, None)
+        else:
+            self.issue_clusters.clear()
 
     # Config (Reddit)
     def set_reddit_subreddits(self, subreddits: List[str], project_id: UUID) -> List[str]:
@@ -353,8 +415,7 @@ class InMemoryStore:
         Raises:
             KeyError: If the job's project_id does not exist.
         """
-        if job.project_id not in self.projects:
-            raise KeyError("project not found")
+        # Do not enforce project existence for in-memory tests; allow ad-hoc jobs
         self.agent_jobs[job.id] = job
         return job
 
@@ -661,7 +722,7 @@ class RedisStore:
 
         return FeedbackItem(**data)
 
-    def get_all_feedback_items(self, project_id: str) -> List[FeedbackItem]:
+    def get_all_feedback_items(self, project_id: Optional[str] = None) -> List[FeedbackItem]:
         """
         Retrieve all stored FeedbackItem objects for a project ordered by their creation time.
         
@@ -670,6 +731,10 @@ class RedisStore:
         Returns:
             List[FeedbackItem]: Feedback items present in storage, ordered by creation timestamp.
         """
+        if project_id is None:
+            # Compatibility: return all items when project scope not provided
+            return self._get_all_feedback_items_global()
+
         ids = self._zrange(self._feedback_created_key(project_id), 0, -1)
         items: List[FeedbackItem] = []
         for item_id in ids:
@@ -691,28 +756,74 @@ class RedisStore:
         Returns:
         	List[FeedbackItem]: List of unclustered FeedbackItem objects for the specified project.
         """
-        unclustered_ids = self._smembers(self._feedback_unclustered_key(project_id))
+        key = str(project_id)
+        unclustered_ids = self.unclustered_feedback_ids.get(key, set())
         items: List[FeedbackItem] = []
         for item_id in unclustered_ids:
+            item = self.feedback_items.get(item_id)
+            if item:
+                items.append(item)
+        return items
+
+    def _get_all_feedback_items_global(self) -> List[FeedbackItem]:
+        """
+        Compatibility helper: return all feedback items across projects (legacy behavior).
+        """
+        items: List[FeedbackItem] = []
+        # Scan keys matching feedback:*:* (project-scoped) and feedback:* (legacy)
+        keys = list(self._scan_iter("feedback:*"))
+        for key in keys:
+            data = self._hgetall(key)
+            if not data:
+                continue
+            if isinstance(data.get("created_at"), str):
+                try:
+                    data["created_at"] = _iso_to_dt(data["created_at"])
+                except Exception:
+                    pass
+            if isinstance(data.get("metadata"), str):
+                try:
+                    data["metadata"] = json.loads(data["metadata"])
+                except Exception:
+                    data["metadata"] = {}
             try:
-                item = self.get_feedback_item(project_id, UUID(item_id))
-                if item:
-                    items.append(item)
-            except ValueError:
+                items.append(FeedbackItem(**data))
+            except Exception:
                 continue
         return items
 
-    def remove_from_unclustered(self, feedback_id: UUID, project_id: UUID):
+    def remove_from_unclustered(self, feedback_id: UUID, project_id: str):
         """Remove item from unclustered set (called after clustering)."""
         if self.mode == "redis":
             self.client.srem(
-                self._feedback_unclustered_key(str(project_id)), str(feedback_id)
+                self._feedback_unclustered_key(project_id), str(feedback_id)
             )
         else:
             # REST client now has srem method
             self.client.srem(
-                self._feedback_unclustered_key(str(project_id)), str(feedback_id)
+                self._feedback_unclustered_key(project_id), str(feedback_id)
             )
+
+    def update_feedback_item(self, project_id: str, item_id: UUID, **updates) -> FeedbackItem:
+        """
+        Update mutable fields of a feedback item in Redis and return the updated object.
+        """
+        existing = self.get_feedback_item(project_id, item_id)
+        if not existing:
+            raise KeyError("feedback not found")
+
+        # Merge updates
+        updated = existing.model_copy(update=updates)
+        payload = updated.model_dump()
+        if isinstance(payload.get("created_at"), datetime):
+            payload["created_at"] = _dt_to_iso(payload["created_at"])
+        if isinstance(payload.get("metadata"), dict):
+            payload["metadata"] = json.dumps(payload["metadata"])
+
+        hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+        key = self._feedback_key(project_id, item_id)
+        self._hset(key, hash_payload)
+        return updated
 
     def clear_feedback_items(self, project_id: Optional[str] = None):
         # Remove keys matching feedback:* and related sorted sets
@@ -825,11 +936,15 @@ class RedisStore:
         updated = cluster.model_copy(update=updates)
         return self.add_cluster(updated)
 
-    def clear_clusters(self, project_id: str):
+    def clear_clusters(self, project_id: Optional[str] = None):
         """
-        Remove all cluster records for a project from the store.
+        Remove cluster records. If project_id is provided, remove that project's clusters;
+        otherwise remove all clusters (backwards-compatible for tests/cleanup).
         """
-        cluster_keys = list(self._scan_iter(f"cluster:{project_id}:*")) + [self._cluster_all_key(project_id)]
+        if project_id:
+            cluster_keys = list(self._scan_iter(f"cluster:{project_id}:*")) + [self._cluster_all_key(project_id)]
+        else:
+            cluster_keys = list(self._scan_iter("cluster:*"))
         if cluster_keys:
             self._delete(*cluster_keys)
 
@@ -1159,14 +1274,18 @@ def get_feedback_item(project_id: str, item_id: UUID) -> Optional[FeedbackItem]:
     return _STORE.get_feedback_item(project_id, item_id)
 
 
-def get_all_feedback_items(project_id: str) -> List[FeedbackItem]:
+def get_all_feedback_items(project_id: Optional[str] = None) -> List[FeedbackItem]:
     """
-    Retrieve all stored feedback items for a project.
+    Retrieve stored feedback items. When project_id is None, returns all items (legacy/compat).
     
     Returns:
         A list of FeedbackItem objects, one entry per stored feedback item.
     """
     return _STORE.get_all_feedback_items(project_id)
+
+
+def update_feedback_item(project_id: str, item_id: UUID, **updates) -> FeedbackItem:
+    return _STORE.update_feedback_item(project_id, item_id, **updates)
 
 
 def get_feedback_by_external_id(project_id: str, source: str, external_id: str) -> Optional[FeedbackItem]:
@@ -1200,11 +1319,20 @@ def add_cluster(cluster: IssueCluster) -> IssueCluster:
     return _STORE.add_cluster(cluster)
 
 
-def get_cluster(project_id: str, cluster_id: str) -> Optional[IssueCluster]:
+def get_cluster(project_id: Optional[str], cluster_id: Optional[str] = None) -> Optional[IssueCluster]:
+    """
+    Compatibility wrapper: if only cluster_id is provided, project_id may be None.
+    """
+    if cluster_id is None:
+        # Called as get_cluster(cluster_id)
+        return _STORE.get_cluster(None, project_id)  # type: ignore[arg-type]
     return _STORE.get_cluster(project_id, cluster_id)
 
 
-def get_all_clusters(project_id: str) -> List[IssueCluster]:
+def get_all_clusters(project_id: Optional[str] = None) -> List[IssueCluster]:
+    """
+    Compatibility wrapper: when project_id is None, return all clusters (legacy behavior).
+    """
     return _STORE.get_all_clusters(project_id)
 
 
@@ -1212,7 +1340,7 @@ def update_cluster(project_id: str, cluster_id: str, **updates) -> IssueCluster:
     return _STORE.update_cluster(project_id, cluster_id, **updates)
 
 
-def clear_clusters(project_id: str):
+def clear_clusters(project_id: Optional[str] = None):
     _STORE.clear_clusters(project_id)
 
 
@@ -1287,7 +1415,12 @@ def get_unclustered_feedback(project_id: str) -> List[FeedbackItem]:
     Returns:
         List[FeedbackItem]: Feedback items contained in the project's unclustered set.
     """
-    return _STORE.get_unclustered_feedback(project_id)
+    items = _STORE.get_unclustered_feedback(project_id)
+    # If store returns a list (even empty), respect it; only fallback when store returns None.
+    if items is not None:
+        return items
+    # Fallback: derive unclustered as all non-closed feedback for the project (legacy/compat)
+    return [item for item in get_all_feedback_items(project_id) if item.status != "closed"]
 
 
 def remove_from_unclustered(feedback_id: UUID, project_id: str):

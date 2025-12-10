@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
-from backend.main import app
-from backend.store import (
+from main import app
+from store import (
     clear_feedback_items, 
     get_all_feedback_items, 
     clear_clusters, 
@@ -264,7 +264,7 @@ def test_github_ingestion_adds_to_unclustered(project_context, monkeypatch):
     }
 
     monkeypatch.setattr(
-        "backend.main.fetch_repo_issues",
+        "main.fetch_repo_issues",
         lambda owner, repo, since=None: [issue_open],
     )
 

@@ -28,10 +28,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Support running as a script from ./backend (adds this dir to sys.path)
-if __package__ is None:
-    sys.path.append(os.path.dirname(__file__))
-
 from models import FeedbackItem, IssueCluster, AgentJob, User, Project
 from store import (
     add_cluster,
@@ -41,6 +37,7 @@ from store import (
     get_cluster,
     get_feedback_item,
     get_feedback_by_external_id,
+    update_feedback_item,
     remove_from_unclustered,
     clear_clusters,
     set_reddit_subreddits_for_project,
@@ -137,14 +134,15 @@ def ingest_reddit(item: FeedbackItem, project_id: Optional[UUID] = Query(None)):
         HTTPException: If no project_id is available (neither argument nor item.project_id).
     """
     pid = _require_project_id(project_id or item.project_id)
+    pid_str = str(pid)
     item = item.model_copy(update={"project_id": pid})
     if item.external_id:
-        existing = get_feedback_by_external_id(pid, item.source, item.external_id)
+        existing = get_feedback_by_external_id(pid_str, item.source, item.external_id)
         if existing:
             return {"status": "duplicate", "id": str(existing.id)}
     add_feedback_item(item)
     _auto_cluster_feedback(item)
-    return {"status": "ok", "id": str(item.id), "project_id": str(pid)}
+    return {"status": "ok", "id": str(item.id), "project_id": pid_str}
 
 
 # ============================================================
@@ -340,7 +338,10 @@ async def ingest_github_sync(
 
     try:
         logger.info(f"Fetching issues from GitHub API for {owner}/{repo}...")
-        issues = fetch_repo_issues(owner, repo, since=since, token=x_github_token)
+        fetch_kwargs = {"since": since}
+        if x_github_token:
+            fetch_kwargs["token"] = x_github_token
+        issues = fetch_repo_issues(owner, repo, **fetch_kwargs)
         logger.info(f"Fetched {len(issues)} issues from GitHub")
     except Exception as exc:
         logger.exception(f"GitHub sync failed for {repo_full_name}: {exc}")
@@ -646,6 +647,37 @@ def get_feedback(
         "offset": offset,
         "project_id": str(pid),
     }
+
+
+class FeedbackUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    metadata: Optional[dict] = None
+    github_repo_url: Optional[str] = None
+    status: Optional[str] = None
+    repo: Optional[str] = None
+    raw_text: Optional[str] = None
+
+
+@app.put("/feedback/{item_id}")
+def update_feedback_entry(
+    item_id: UUID, payload: FeedbackUpdate, project_id: Optional[UUID] = Query(None)
+):
+    """
+    Update mutable fields on a FeedbackItem scoped to a project.
+    """
+    pid = _require_project_id(project_id)
+    pid_str = str(pid)
+    existing = get_feedback_item(pid_str, item_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Feedback item not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return {"status": "ok", "id": str(item_id), "project_id": pid_str}
+
+    updated = update_feedback_item(pid_str, item_id, **updates)
+    return {"status": "ok", "item": updated}
 
 
 @app.get("/feedback/{item_id}")

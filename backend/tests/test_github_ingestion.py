@@ -1,9 +1,9 @@
 from fastapi.testclient import TestClient
 
-from backend import main as backend_main
-from backend.github_client import issue_to_feedback_item
-from backend.main import app
-from backend.store import (
+import main as backend_main
+from github_client import issue_to_feedback_item
+from main import app
+from store import (
     get_all_feedback_items,
     get_unclustered_feedback,
 )
@@ -68,7 +68,7 @@ def test_sync_github_repo_first_sync(project_context, monkeypatch):
     }
 
     monkeypatch.setattr(
-        "backend.main.fetch_repo_issues",
+        "main.fetch_repo_issues",
         lambda owner, repo, since=None: [issue_open, issue_closed],
     )
 
@@ -114,11 +114,11 @@ def test_sync_github_repo_incremental(project_context, monkeypatch):
         calls["second_since"] = since
         return []
 
-    monkeypatch.setattr("backend.main.fetch_repo_issues", first_fetch)
+    monkeypatch.setattr("main.fetch_repo_issues", first_fetch)
     first_resp = client.post(f"/ingest/github/sync/org/repo?project_id={pid}")
     assert first_resp.status_code == 200
 
-    monkeypatch.setattr("backend.main.fetch_repo_issues", second_fetch)
+    monkeypatch.setattr("main.fetch_repo_issues", second_fetch)
     second_resp = client.post(f"/ingest/github/sync/org/repo?project_id={pid}")
     assert second_resp.status_code == 200
 
