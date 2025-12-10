@@ -175,12 +175,12 @@ class InMemoryStore:
         self.feedback_items: Dict[UUID, FeedbackItem] = {}
         self.issue_clusters: Dict[UUID, IssueCluster] = {}
         self.agent_jobs: Dict[UUID, AgentJob] = {}
-        self.projects: Dict[UUID, Project] = {}
-        self.users: Dict[UUID, User] = {}
-        self.reddit_subreddits: Dict[UUID, List[str]] = {}
-        self.external_index: Dict[Tuple[UUID, str, str], UUID] = {}
+        self.projects: Dict[str, Project] = {}
+        self.users: Dict[str, User] = {}
+        self.reddit_subreddits: Dict[str, List[str]] = {}
+        self.external_index: Dict[Tuple[str, str, str], UUID] = {}
         # Track unclustered feedback per project (project_id -> set(feedback_ids))
-        self.unclustered_feedback_ids: Dict[UUID, set[UUID]] = {}
+        self.unclustered_feedback_ids: Dict[str, set[UUID]] = {}
 
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
@@ -380,14 +380,9 @@ class InMemoryStore:
             KeyError: If no project exists with the given `project_id`.
         """
         pid_str = str(project_id)
-        target_key = None
-        for key in self.projects:
-            if str(key) == pid_str:
-                target_key = key
-                break
-        if target_key is None:
+        if pid_str not in self.projects:
             raise KeyError("project not found")
-        self.reddit_subreddits[target_key] = subreddits
+        self.reddit_subreddits[pid_str] = subreddits
         return subreddits
 
     def get_reddit_subreddits(self, project_id: ProjectId) -> Optional[List[str]]:
@@ -397,15 +392,7 @@ class InMemoryStore:
         Returns:
             List[str]: The subreddit names for the project, or `None` if no configuration exists.
         """
-        pid_str = str(project_id)
-        # Direct lookup
-        if project_id in self.reddit_subreddits:
-            return self.reddit_subreddits.get(project_id)
-        # Fallback by string match
-        for key, value in self.reddit_subreddits.items():
-            if str(key) == pid_str:
-                return value
-        return None
+        return self.reddit_subreddits.get(str(project_id))
 
     def clear_config(self):
         """
@@ -486,8 +473,8 @@ class InMemoryStore:
         Returns:
             Project: The stored default project.
         """
-        self.users[user.id] = user
-        self.projects[default_project.id] = default_project
+        self.users[str(user.id)] = user
+        self.projects[str(default_project.id)] = default_project
         return default_project
 
     def create_project(self, project: Project) -> Project:
@@ -500,10 +487,10 @@ class InMemoryStore:
         Returns:
             Project: The stored project instance.
         """
-        self.projects[project.id] = project
+        self.projects[str(project.id)] = project
         return project
 
-    def get_projects_for_user(self, user_id: UUID) -> List[Project]:
+    def get_projects_for_user(self, user_id: UUID | str) -> List[Project]:
         """
         Retrieve all projects owned by the given user.
         
@@ -513,16 +500,17 @@ class InMemoryStore:
         Returns:
             List[Project]: Projects belonging to the specified user (empty list if none).
         """
-        return [p for p in self.projects.values() if p.user_id == user_id]
+        uid = str(user_id)
+        return [p for p in self.projects.values() if str(p.user_id) == uid]
 
-    def get_project(self, project_id: UUID) -> Optional[Project]:
+    def get_project(self, project_id: UUID | str) -> Optional[Project]:
         """
         Retrieve a project by its identifier.
         
         Returns:
             Project or None: The Project with the given `project_id` if it exists, otherwise `None`.
         """
-        return self.projects.get(project_id)
+        return self.projects.get(str(project_id))
 
 
 class RedisStore:
@@ -1175,7 +1163,7 @@ class RedisStore:
         projects: List[Project] = []
         for pid in project_ids:
             try:
-                project = self.get_project(UUID(pid))
+                project = self.get_project(pid)
             except ValueError:
                 continue
             if project:
