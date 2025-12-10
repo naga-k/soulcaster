@@ -756,13 +756,16 @@ class RedisStore:
         Returns:
         	List[FeedbackItem]: List of unclustered FeedbackItem objects for the specified project.
         """
-        key = str(project_id)
-        unclustered_ids = self.unclustered_feedback_ids.get(key, set())
+        unclustered_key = self._feedback_unclustered_key(project_id)
+        unclustered_ids = self._smembers(unclustered_key)
         items: List[FeedbackItem] = []
         for item_id in unclustered_ids:
-            item = self.feedback_items.get(item_id)
-            if item:
-                items.append(item)
+            try:
+                item = self.get_feedback_item(project_id, UUID(item_id))
+                if item:
+                    items.append(item)
+            except ValueError:
+                continue
         return items
 
     def _get_all_feedback_items_global(self) -> List[FeedbackItem]:
@@ -1100,7 +1103,7 @@ class RedisStore:
         if not existing_id:
             return None
         try:
-            return self.get_feedback_item(UUID(existing_id))
+            return self.get_feedback_item(str(project_id), UUID(existing_id))
         except ValueError:
             return None
 

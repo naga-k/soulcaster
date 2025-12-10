@@ -338,7 +338,11 @@ async def ingest_github_sync(
 
     try:
         logger.info(f"Fetching issues from GitHub API for {owner}/{repo}...")
-        fetch_kwargs = {"since": since}
+        fetch_kwargs = {
+            "since": since,
+            "max_pages": int(os.getenv("GITHUB_SYNC_MAX_PAGES", "20")),
+            "max_issues": int(os.getenv("GITHUB_SYNC_MAX_ISSUES", "2000")),
+        }
         if x_github_token:
             fetch_kwargs["token"] = x_github_token
         issues = fetch_repo_issues(owner, repo, **fetch_kwargs)
@@ -552,6 +556,13 @@ def _auto_cluster_feedback(item: FeedbackItem) -> IssueCluster:
         cluster_summary = (
             f"Reports from r/{subreddit}" if subreddit else "Feedback from Reddit submissions"
         )
+    elif item.source == "github":
+        repo_name = None
+        if isinstance(item.metadata, dict):
+            repo_name = item.metadata.get("repo")
+        repo_name = repo_name or getattr(item, "repo", None) or "GitHub repository"
+        cluster_title = f"GitHub: {repo_name}"
+        cluster_summary = f"Issues from GitHub repository {repo_name}"
     elif item.source == "sentry":
         cluster_title = "Sentry issues"
         cluster_summary = "Error reports ingested from Sentry webhooks"

@@ -61,7 +61,12 @@ def _parse_github_datetime(value: str) -> datetime:
 
 
 def fetch_repo_issues(
-    owner: str, repo: str, since: Optional[str] = None, token: Optional[str] = None
+    owner: str,
+    repo: str,
+    since: Optional[str] = None,
+    token: Optional[str] = None,
+    max_pages: int = 20,
+    max_issues: int = 2000,
 ) -> List[Dict[str, Any]]:
     """
     Fetch all issues (excluding pull requests) for a repository.
@@ -87,8 +92,21 @@ def fetch_repo_issues(
 
     issues: List[Dict[str, Any]] = []
     session = requests.Session()
+    page = 0
+    seen_urls = set()
 
     while url:
+        page += 1
+        if page > max_pages:
+            logger.warning(
+                "Stopping fetch for %s/%s after reaching max_pages=%s", owner, repo, max_pages
+            )
+            break
+        if url in seen_urls:
+            logger.warning("Detected repeated page URL, stopping pagination: %s", url)
+            break
+        seen_urls.add(url)
+
         resp = session.get(url, headers=_auth_headers(token), params=params, timeout=15)
         resp.raise_for_status()
         page_items = resp.json()
@@ -98,6 +116,14 @@ def fetch_repo_issues(
             if issue.get("pull_request"):
                 continue
             issues.append(issue)
+            if len(issues) >= max_issues:
+                logger.warning(
+                    "Stopping fetch for %s/%s after reaching max_issues=%s",
+                    owner,
+                    repo,
+                    max_issues,
+                )
+                return issues
 
         # Handle pagination
         link = resp.headers.get("Link")

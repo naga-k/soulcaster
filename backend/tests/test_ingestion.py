@@ -265,7 +265,7 @@ def test_github_ingestion_adds_to_unclustered(project_context, monkeypatch):
 
     monkeypatch.setattr(
         "main.fetch_repo_issues",
-        lambda owner, repo, since=None: [issue_open],
+        lambda owner, repo, since=None, **kwargs: [issue_open],
     )
 
     response = client.post(f"/ingest/github/sync/org/repo?project_id={pid}")
