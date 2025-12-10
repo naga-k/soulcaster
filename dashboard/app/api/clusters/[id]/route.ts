@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getClusterDetail } from '@/lib/redis';
 import { requireProjectId } from '@/lib/project';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Retrieve a cluster by its ID and respond with JSON.
@@ -18,18 +19,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Invalid cluster ID' }, { status: 400 });
     }
 
-    const cluster = await getClusterDetail(projectId, id);
-
-    if (!cluster) {
-      return NextResponse.json({ error: 'Cluster not found' }, { status: 404 });
-    }
-
-    return NextResponse.json(cluster);
+    const response = await fetch(`${backendUrl}/clusters/${id}?project_id=${projectId}`);
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
   } catch (error: any) {
     if (error?.message === 'project_id is required') {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
-    console.error('Error fetching cluster from Redis:', error);
+    console.error('Error fetching cluster from backend:', error);
     return NextResponse.json({ error: 'Failed to fetch cluster' }, { status: 500 });
   }
 }

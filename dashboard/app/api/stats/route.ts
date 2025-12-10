@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getStats } from '@/lib/redis';
 import { requireProjectId } from '@/lib/project';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Handle GET requests to retrieve statistics for a project from Redis.
@@ -11,13 +12,14 @@ import { requireProjectId } from '@/lib/project';
 export async function GET(request: Request) {
   try {
     const projectId = await requireProjectId(request);
-    const stats = await getStats(projectId);
-    return NextResponse.json(stats);
+    const response = await fetch(`${backendUrl}/stats?project_id=${projectId}`);
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
   } catch (error: any) {
     if (error?.message === 'project_id is required') {
       return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
     }
-    console.error('Error fetching stats from Redis:', error);
+    console.error('Error fetching stats from backend:', error);
     return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
   }
 }

@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getUnclusteredCount } from '@/lib/redis';
+import { Redis } from '@upstash/redis';
 import { requireProjectId } from '@/lib/project';
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
+
+const feedbackUnclusteredKey = (projectId: string) => `feedback:unclustered:${projectId}`;
 
 /**
  * Get the unclustered feedback count for the project associated with the request.
@@ -11,7 +18,7 @@ import { requireProjectId } from '@/lib/project';
 export async function GET(request: Request) {
   try {
     const projectId = await requireProjectId(request);
-    const count = await getUnclusteredCount(projectId);
+    const count = (await redis.scard(feedbackUnclusteredKey(projectId))) || 0;
     return NextResponse.json({ count });
   } catch (error: any) {
     if (error?.message === 'project_id is required') {
