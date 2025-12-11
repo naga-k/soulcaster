@@ -6,6 +6,24 @@ Status: Draft
 
 ---
 
+## Soulcaster Snapshot (Plan vs Reality)
+
+This is a quick, top‑level comparison; the rest of the document is the original PRD.
+
+| Area            | Originally Planned                                         | Implemented in Soulcaster                                      | Extra / Out of Scope                          |
+|-----------------|-----------------------------------------------------------|-----------------------------------------------------------------|-----------------------------------------------|
+| Ingestion       | Reddit (PRAW), Sentry webhooks, normalize to FeedbackItem | Reddit JSON poller, Sentry, manual text; dedupe via external_id | GitHub issue ingestion via dashboard routes   |
+| Storage         | In‑memory MVP, later Redis/Postgres                       | In‑memory + Redis/Upstash with store abstraction               | Rich Redis schema for jobs + clustering       |
+| Clustering      | Backend embeddings, centroid‑based clustering per ingest  | Simple backend buckets; vector clustering via dashboard + Vector | Cohesion metrics and re-cluster APIs          |
+| Dashboard       | Clusters list + detail, “Generate Fix”                    | Full Next.js App Router UI, stats, config, trigger‑agent flows | GitHub OAuth, SourceConfig UI                 |
+| Coding Agent    | Backend‑embedded PyGithub agent, Python syntax check      | Separate `coding-agent` service, ECS Fargate runner, job tracking | Kilo/Gemini integration, issue-first flow     |
+| DB Hardening    | Postgres schema + indices (post‑hackathon)                | Not implemented yet (Redis only)                               | —                                             |
+| Observability   | Minimal logging, no robustness                            | Minimal logging and tests (more than planned, still non-prod)   | Expanded tests across backend/dashboard/agent |
+
+For a narrative implementation report, see section **10. Implementation Report (Soulcaster vs This PRD)** at the end.
+
+---
+
 ## **1\. Executive Summary**
 
 Build a “self-healing dev loop” MVP:
@@ -797,12 +815,71 @@ These are explicitly Post‑Hackathon. Tags in brackets.
 ---
 
 ## **9\. Success Metrics (for MVP)**
-
+	
 * ≥1 real PR opened from real Reddit or Sentry feedback.
-
+	
 * Dashboard shows clustered issues with sensible summaries.
-
+	
 * Full loop (ingest → cluster → click → PR) completes in \<2 minutes on average for small repos.
-
+	
 * Devs feel comfortable reviewing, not re-writing, the auto-generated PR.
+	
+---
 
+## **10\. Implementation Report (Soulcaster vs This PRD)**
+
+This section gives a high‑level report of how the current Soulcaster codebase lines up with the original hackathon PRD: what was planned and built, what’s still open, and what we added that wasn’t originally in scope. The detailed PRD text above is left unchanged; this is a summary overlay.
+
+### **10.1 Planned & Implemented**
+
+These items were explicitly in the PRD and exist in the current codebase:
+
+* Ingestion:
+  * Reddit ingest endpoint `POST /ingest/reddit` and a poller script (`backend/reddit_poller.py`), plus Sentry ingest via `POST /ingest/sentry`.
+  * Manual text ingestion `POST /ingest/manual`, which matches the “manual feedback” idea even though it was not fully spelled out in the original doc.
+  * Deduplication on `(source, external_id)` via `get_feedback_by_external_id` and `feedback:external:{source}:{external_id}` in `backend/store.py`.
+* Storage:
+  * In‑memory storage and Redis/Upstash storage behind a store abstraction (`backend/store.py`), matching the “in‑memory first, easy to swap” constraint.
+  * Redis keys for feedback and clusters (`feedback:{id}`, `feedback:created`, `feedback:source:{source}`, `cluster:{id}`, `cluster:items:{id}`), as outlined in the original DB design doc.
+* Clusters & dashboard:
+  * Backend cluster APIs `GET /clusters`, `GET /clusters/{id}`, `POST /clusters/{id}/start_fix`.
+  * A Next.js dashboard (App Router) showing clusters, feedback counts, statuses, and a “Generate Fix” action wired through `/api/clusters/[id]/start_fix`.
+* Coding agent & PR loop:
+  * A coding agent that opens real GitHub PRs, using repository context plus issue/cluster data.
+  * Basic job tracking for “Generate Fix” via `/jobs` endpoints on the backend (status, logs) consumed by the dashboard.
+
+### **10.2 Planned but Not Yet Implemented or Only Partially Implemented**
+
+These items are called out in the PRD but are not fully wired, or exist only in a simplified form:
+
+* Clustering and summaries:
+  * Always‑on embedding‑based clustering in the backend on each ingest (with centroids and cosine thresholds) is not implemented; backend clustering is currently simple bucketing by source and subreddit/title.
+  * LLM‑generated cluster titles and summaries exist in the dashboard vector clustering flow, but the backend’s `_auto_cluster_feedback` still uses static titles/summaries.
+  * Cluster merge/split operations, severity tags, advanced filters/search, and timelines are still future work.
+* Coding agent behavior:
+  * The PRD’s backend‑embedded coding agent with PyGithub and Python‑only syntax checks is conceptually there, but the actual implementation is a separate `coding-agent` service rather than living inside the FastAPI app.
+  * Multi‑language syntax checks, stronger RAG over the codebase, and auto‑closing clusters on PR merge remain in the “future scope” category.
+* Storage & infra:
+  * The “swap to Postgres/Supabase” part of the plan (with explicit SQL schema) has not been built; Redis/Upstash plus in‑memory fallback are the only stores today.
+  * Production‑grade observability (metrics, tracing, rate limits, retries) is still minimal, consistent with the hackathon constraint but short of a hardened system.
+* Productization:
+  * Full auth and multi‑tenant/multi‑repo routing are not implemented end‑to‑end; GitHub OAuth exists on the dashboard via NextAuth, but backend APIs are still keyed by env/config.
+
+### **10.3 Not in Original Scope but Implemented (Extras)**
+
+These pieces were not captured in the original 24h PRD but exist in the Soulcaster codebase today:
+
+* Vector‑based clustering in the dashboard:
+  * Upstash Vector + Gemini‑based clustering pipeline implemented in `dashboard/lib/vector.ts` and `/app/api/clusters/run-vector`, operating on `feedback:unclustered`, `cluster:{id}`, `cluster:items:{id}`, and `clusters:all`.
+  * Cohesion scoring and similarity‑based grouping beyond the simple centroid model envisioned in this document.
+* Separate coding agent service + AWS runner:
+  * A standalone `coding-agent/fix_issue.py` CLI, wrapped in a container and launched as an ECS Fargate task via `/app/api/trigger-agent`.
+  * Backend job tracking (`job:{id}`, `cluster:jobs:{cluster_id}`) connected to the agent via `BACKEND_URL`/`JOB_ID`, with logs and status updates surfaced in the dashboard.
+* Extra ingestion and config flows:
+  * GitHub issue ingestion and sync routes on the dashboard, writing normalized feedback directly into Redis, beyond just Reddit/Sentry.
+  * A Reddit subreddit config UI backed by `config:reddit:subreddits` shared between dashboard and backend.
+* Tests and documentation:
+  * A broader automated test surface for backend, dashboard, and coding agent than the original PRD’s “no serious test suite” constraint.
+  * Additional architecture docs: `documentation/current_architecture.md` and the enriched Redis plan in `documentation/db_design.md`.
+
+For a deeper system‑level view, see `documentation/current_architecture.md`, and for the exact Redis keyshapes backing this loop, see `documentation/db_design.md`.

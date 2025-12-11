@@ -6,12 +6,14 @@ import type { ClusterListItem } from '@/types';
 import SourceConfig from '@/components/SourceConfig';
 
 /**
- * Renders a client-side page that lists issue clusters and handles loading, error, and empty states.
+ * Display the Issue Clusters page and manage its loading, error, empty, and populated states.
  *
- * Fetches clusters from /api/clusters on mount and displays them in a table with title, summary,
- * count, source icons, status badges, and a link to view details.
+ * On mount the component loads cluster data and the count of unclustered items, automatically
+ * triggering a silent clustering run when unclustered items exist. The UI lets users manually
+ * run clustering, toggle source configuration, and browse clusters in a table that shows title,
+ * summary, repositories, status, feedback count, and a link to cluster details.
  *
- * @returns The React element for the clusters list page.
+ * @returns The React element for the Issue Clusters page
  */
 export default function ClustersListPage() {
   const [clusters, setClusters] = useState<ClusterListItem[]>([]);
@@ -159,6 +161,33 @@ export default function ClustersListPage() {
             </Link>
             .
           </p>
+          <p className="mt-4 text-sm text-purple-700">
+            {unclusteredCount > 0
+              ? `${unclusteredCount} unclustered feedback item${unclusteredCount === 1 ? '' : 's'} ready to group.`
+              : 'No unclustered feedback detected yet.'}
+          </p>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={triggerClustering}
+              disabled={isClustering}
+              className={`w-full sm:w-auto px-6 py-3 border border-transparent text-sm font-bold rounded-full shadow-neon-green text-black bg-matrix-green hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-matrix-green disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wide ${isClustering ? 'animate-pulse' : ''
+                }`}
+            >
+              {isClustering ? 'Running AI Clustering...' : 'Run Clustering'}
+            </button>
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className={`w-full sm:w-auto px-6 py-3 border border-purple-200 text-sm font-semibold rounded-full text-purple-900 bg-white hover:bg-purple-50 transition-all ${showConfig ? 'ring-2 ring-purple-200' : ''
+                }`}
+            >
+              {showConfig ? 'Hide Source Settings' : 'Configure Sources'}
+            </button>
+          </div>
+          {showConfig && (
+            <div className="mt-6 text-left">
+              <SourceConfig />
+            </div>
+          )}
         </div>
       </div>
     );
