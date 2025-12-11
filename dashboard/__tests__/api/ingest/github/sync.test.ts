@@ -25,10 +25,24 @@ describe('API /api/ingest/github/sync/[name]', () => {
   const projectId = 'proj-123';
   const token = 'gho_test_token';
 
+  let originalBackendUrl: string | undefined;
+  let originalFetch: typeof fetch;
+
   beforeEach(() => {
+    originalBackendUrl = process.env.BACKEND_URL;
+    originalFetch = global.fetch;
     process.env.BACKEND_URL = backendUrl;
     jest.clearAllMocks();
     (global.fetch as any) = jest.fn();
+  });
+
+  afterEach(() => {
+    if (originalBackendUrl !== undefined) {
+      process.env.BACKEND_URL = originalBackendUrl;
+    } else {
+      delete process.env.BACKEND_URL;
+    }
+    global.fetch = originalFetch;
   });
 
   it('forwards project, token, and repo to backend', async () => {
@@ -59,7 +73,7 @@ describe('API /api/ingest/github/sync/[name]', () => {
   });
 
   it('returns 401 when project is missing', async () => {
-    mockGetProjectId.mockResolvedValue(null);
+    mockGetProjectId.mockResolvedValue(undefined);
     mockGetGitHubToken.mockResolvedValue(token);
 
     const request = { headers: new Headers(), method: 'POST' } as any;

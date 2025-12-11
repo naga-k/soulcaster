@@ -43,9 +43,8 @@ flowchart LR
 
     subgraph Dashboard["Dashboard (Next.js)"]
         UI["UI & pages\nApp Router"]
-        API["API routes\n/app/api/*"]
+        API["API routes\n/app/api/*\n(proxy to backend)"]
         Vector["Vector & clustering\nlib/vector.ts, lib/clustering.ts"]
-        RedisLib["Redis helpers\nlib/redis.ts"]
     end
 
     subgraph Agent["Coding agent\n(ECS Fargate task)"]

@@ -217,7 +217,7 @@ def test_get_feedback_with_cuid_project():
 
 def test_get_stats_with_cuid_project():
     """Ensure /stats accepts CUID project_id without 422."""
-    cuid = "cmiy0tdxz00022mo0aa3ywqsx"
+    cuid = "cmiy0tdxz00022mo0bb4zxrty"
     add_feedback_item(
         FeedbackItem(
             id=uuid4(),

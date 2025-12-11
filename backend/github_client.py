@@ -74,11 +74,14 @@ def fetch_repo_issues(
     Args:
         owner: GitHub repo owner.
         repo: Repository name.
-        since: Optional ISO timestamp to fetch issues updated since then.
+        since: Optional ISO 8601 timestamp (e.g., "2024-01-01T00:00:00Z") to fetch issues updated since then.
         token: Optional GitHub access token (from user OAuth session).
 
     Returns:
         List of issue dicts (pull requests filtered out).
+
+    Raises:
+        requests.HTTPError: If the GitHub API request fails (e.g., 422 for invalid since format).
     """
     url = f"{GITHUB_API_URL}/repos/{owner}/{repo}/issues"
     params = {

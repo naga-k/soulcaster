@@ -22,8 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -585,7 +586,7 @@ def _auto_cluster_feedback(item: FeedbackItem) -> IssueCluster:
 
     if existing:
         if str(item.id) not in existing.feedback_ids:
-            updated_ids = existing.feedback_ids + [str(item.id)]
+            updated_ids = [*existing.feedback_ids, str(item.id)]
             return update_cluster(
                 project_id,
                 existing.id,
