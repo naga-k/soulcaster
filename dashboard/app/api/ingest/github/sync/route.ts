@@ -116,7 +116,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (repoData && repoData.enabled === 'true') {
+      const enabled = repoData ? repoData.enabled !== 'false' : false;
+
+      if (repoData && enabled) {
         repos.push({
           owner: repoData.owner as string,
           repo: repoData.repo as string,
@@ -128,7 +130,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[GitHub Sync] Syncing ${repos.length} enabled repos`);
+    console.log(`[GitHub Sync] Syncing ${repos.length} enabled repos: ${repos.map(r => r.full_name).join(', ')}`);
 
     const results = [];
     let totalNew = 0;
@@ -179,6 +181,10 @@ export async function POST(request: NextRequest) {
         totalNew += newCount;
         totalUpdated += updatedCount;
         totalClosed += closedCount;
+
+        console.log(
+          `[GitHub Sync] ${repo.full_name}: new=${newCount}, updated=${updatedCount}, closed=${closedCount}, total=${totalIssues}, ignored_prs=${ignoredPrs}`
+        );
       } catch (error) {
         console.error(`[GitHub Sync] Error syncing ${repo.full_name}:`, error);
         results.push({
