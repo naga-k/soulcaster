@@ -67,7 +67,7 @@ app = FastAPI(
 async def global_exception_handler(request: Request, exc: Exception):
     """Log all unhandled exceptions with full details."""
     logger.exception(f"Unhandled exception for {request.method} {request.url}: {exc}")
-    raise exc
+    raise
 
 # Track GitHub sync metadata in-memory (per process). If persistence is needed,
 # promote this to Redis-backed storage.
@@ -353,8 +353,8 @@ async def ingest_github_sync(
         issues = fetch_repo_issues(owner, repo, **fetch_kwargs)
         logger.info(f"Fetched {len(issues)} issues from GitHub")
     except Exception as exc:
-        logger.exception(f"GitHub sync failed for {repo_full_name}: {exc}")
-        raise HTTPException(status_code=502, detail=f"GitHub sync failed: {exc}")
+        logger.exception(f"GitHub sync failed for {repo_full_name}")
+        raise HTTPException(status_code=502, detail=f"GitHub sync failed: {exc}") from exc
 
     new_count = 0
     updated_count = 0

@@ -443,24 +443,6 @@ class InMemoryStore:
         """
         self.agent_jobs.clear()
 
-    def get_feedback_by_external_id(self, project_id: UUID, source: str, external_id: str) -> Optional[FeedbackItem]:
-        """
-        Look up a FeedbackItem by project, source, and external identifier.
-        
-        Parameters:
-            project_id (UUID): ID of the project that scopes the lookup.
-            source (str): Source name or namespace of the external identifier.
-            external_id (str): External identifier provided by the source.
-        
-        Returns:
-            FeedbackItem | None: The matching FeedbackItem if found, `None` otherwise.
-        """
-        key = (project_id, source, external_id)
-        item_id = self.external_index.get(key)
-        if not item_id:
-            return None
-        return self.feedback_items.get(item_id)
-
     # Users / Projects
     def create_user_with_default_project(self, user: User, default_project: Project) -> Project:
         """

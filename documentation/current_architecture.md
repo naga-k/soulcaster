@@ -187,6 +187,20 @@ This section expands the high-level overview into more implementation detail so 
   - `RedisStore` when `REDIS_URL` or `UPSTASH_REDIS_URL` or `UPSTASH_REDIS_REST_URL` are set and usable.
   - `InMemoryStore` otherwise (non-persistent, process-local).
 
+### Project Scoping (project_id handling)
+
+- All feedback, clusters, and jobs are now scoped to a `project_id` (string, supporting both UUID and CUID formats from the dashboard).
+- Redis keys follow project-scoped patterns:
+  - `feedback:{project_id}:{uuid}` for individual feedback items
+  - `feedback:created:{project_id}` for creation-time sorted sets
+  - `feedback:source:{project_id}:{source}` for per-source indexes
+  - `feedback:external:{project_id}:{source}:{external_id}` for deduplication lookups
+  - `cluster:{project_id}:{id}` for cluster metadata
+  - `cluster:items:{project_id}:{cluster_id}` for cluster membership sets
+  - `clusters:{project_id}:all` for cluster ID listings
+- The dashboard passes `project_id` in all proxy requests to backend endpoints (as query parameter or in request body).
+- The backend uses `project_id` to isolate and filter data per project throughout the storage layer. All store methods accept `project_id` parameters to scope lookups, writes, and deletions to the correct project namespace.
+
 **Key endpoints (today)**
 - Ingestion:
   - `POST /ingest/reddit`:
@@ -297,12 +311,19 @@ This section expands the high-level overview into more implementation detail so 
   - Deduces repo owner/name from `github_repo_url` or defaults (for manual clusters).
   - Calls `POST /api/trigger-agent` with issue + repo context plus `cluster_id`.
   - If that succeeds, calls `POST {BACKEND_URL}/clusters/{id}/start_fix` to set status to `"fixing"`.
-- `POST /api/trigger-agent`:
-  - Creates or validates a GitHub issue using `Octokit`.
-  - Creates a backend job (`POST {BACKEND_URL}/jobs`) when `cluster_id` is provided.
-  - Starts a Fargate task via `RunTaskCommand`, passing:
+**GitHub Integration: Manual vs. Automated Ingestion**
+
+- **Manual triggering (via dashboard)**: `POST /api/trigger-agent`:
+  - Operation order: (1) Creates or validates a GitHub issue using the user's Octokit token (from NextAuth session), (2) Creates a backend job record (`POST {BACKEND_URL}/jobs`) when `cluster_id` is provided, then (3) Starts a Fargate task via `RunTaskCommand` with:
     - Command: `[issue_url, '--job-id', job_id]` or `[issue_url]`.
     - Env: `BACKEND_URL`, `JOB_ID` (if any), and `GH_TOKEN` (if user is authenticated).
+  - Used when a user clicks "Generate Fix" on a cluster from the dashboard UI.
+
+- **Automated syncing (backend)**: `POST /ingest/github/sync/{repo_name}`:
+  - Operation order: (1) Fetches open issues from the specified GitHub repo (using optional `X-GitHub-Token` header for higher API rate limits), (2) Deduplicates by `external_id` using `get_feedback_by_external_id`, and (3) Auto-clusters them via `_auto_cluster_feedback` alongside other feedback sources (Reddit, Sentry, manual).
+  - Accepts `project_id` as query parameter and stores all feedback items scoped to that project.
+  - Intended for scheduled polling of external repos (can be triggered manually from dashboard's `/api/ingest/github/sync/[name]` proxy endpoint).
+  - Both paths are now clearly distinguished: manual triggering is for user-initiated agent runs, while automated syncing is for bulk issue ingestion.
 
 ### Clustering and vector store (TS-side pipeline)
 
