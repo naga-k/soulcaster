@@ -34,12 +34,20 @@ def _iso_to_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _strip_quotes(value: Optional[str]) -> Optional[str]:
+    """Strip surrounding quotes from environment variable values."""
+    if value is None:
+        return None
+    # Strip single or double quotes from both ends
+    return value.strip('"').strip("'")
+
+
 # ---------- Redis (standard) client helpers ----------
 
 
 def _redis_client_from_env():
     """Return a redis-py client if REDIS_URL/UPSTASH_REDIS_URL is set."""
-    url = os.getenv("REDIS_URL") or os.getenv("UPSTASH_REDIS_URL")
+    url = _strip_quotes(os.getenv("REDIS_URL") or os.getenv("UPSTASH_REDIS_URL"))
     if not url or not redis:
         return None
     return redis.from_url(url, decode_responses=True)
@@ -201,8 +209,8 @@ class UpstashRESTClient:
 
 
 def _upstash_rest_client_from_env():
-    url = os.getenv("UPSTASH_REDIS_REST_URL")
-    token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
+    url = _strip_quotes(os.getenv("UPSTASH_REDIS_REST_URL"))
+    token = _strip_quotes(os.getenv("UPSTASH_REDIS_REST_TOKEN"))
     if url and token:
         return UpstashRESTClient(url, token)
     return None
