@@ -4,6 +4,7 @@ Defaults to in-memory dicts, but will use Redis if configured (Upstash-friendly)
 """
 
 import json
+import logging
 import os
 import time
 from datetime import datetime
@@ -21,6 +22,8 @@ try:
     import redis  # type: ignore
 except ImportError:
     redis = None
+
+logger = logging.getLogger(__name__)
 
 
 def _dt_to_iso(dt: datetime) -> str:
@@ -173,7 +176,7 @@ class InMemoryStore:
             unclustered_feedback_ids: Per-project set of feedback IDs that have not been assigned to any cluster.
         """
         self.feedback_items: Dict[UUID, FeedbackItem] = {}
-        self.issue_clusters: Dict[UUID, IssueCluster] = {}
+        self.issue_clusters: Dict[str, IssueCluster] = {}
         self.agent_jobs: Dict[UUID, AgentJob] = {}
         self.projects: Dict[str, Project] = {}
         self.users: Dict[str, User] = {}
@@ -268,6 +271,9 @@ class InMemoryStore:
         existing = self.feedback_items.get(item_id)
         if not existing:
             raise KeyError("feedback not found")
+        # Verify project scoping: ensure the item belongs to the given project
+        if str(existing.project_id) != str(project_id):
+            raise KeyError(f"Feedback {item_id} not found for project {project_id}")
         updated = existing.model_copy(update=updates)
         self.feedback_items[item_id] = updated
         return updated
@@ -766,16 +772,18 @@ class RedisStore:
             if isinstance(data.get("created_at"), str):
                 try:
                     data["created_at"] = _iso_to_dt(data["created_at"])
-                except Exception:
-                    pass
+                except ValueError:
+                    logger.debug("Failed to parse created_at for key %s", key)
             if isinstance(data.get("metadata"), str):
                 try:
                     data["metadata"] = json.loads(data["metadata"])
-                except Exception:
+                except json.JSONDecodeError:
+                    logger.debug("Failed to parse metadata JSON for key %s", key)
                     data["metadata"] = {}
             try:
                 items.append(FeedbackItem(**data))
-            except Exception:
+            except (ValueError, TypeError) as e:
+                logger.debug("Failed to parse FeedbackItem from key %s: %s", key, e)
                 continue
         return items
 
@@ -798,6 +806,9 @@ class RedisStore:
         existing = self.get_feedback_item(project_id, item_id)
         if not existing:
             raise KeyError("feedback not found")
+        # Verify project scoping: ensure the item belongs to the given project
+        if str(existing.project_id) != str(project_id):
+            raise KeyError(f"Feedback {item_id} not found for project {project_id}")
 
         # Merge updates
         updated = existing.model_copy(update=updates)
@@ -906,7 +917,25 @@ class RedisStore:
 
         return IssueCluster(**data)
 
-    def get_all_clusters(self, project_id: str) -> List[IssueCluster]:
+    def get_all_clusters(self, project_id: Optional[str] = None) -> List[IssueCluster]:
+        if project_id is None:
+            # Compatibility: return all clusters across projects
+            clusters: List[IssueCluster] = []
+            # Scan for all project cluster index keys: clusters:*:all
+            for key in self._scan_iter("clusters:*:all"):
+                # Extract project_id from key pattern clusters:<project_id>:all
+                parts = key.split(":")
+                if len(parts) >= 2:
+                    pid = parts[1]
+                    # Get cluster IDs for this project
+                    cluster_ids = self._smembers(self._cluster_all_key(pid))
+                    # Load each cluster
+                    for cid in cluster_ids:
+                        cluster = self.get_cluster(pid, cid)
+                        if cluster:
+                            clusters.append(cluster)
+            return clusters
+
         ids = self._smembers(self._cluster_all_key(project_id))
         clusters: List[IssueCluster] = []
         for cid in ids:
@@ -1306,14 +1335,33 @@ def add_cluster(cluster: IssueCluster) -> IssueCluster:
     return _STORE.add_cluster(cluster)
 
 
-def get_cluster(project_id: Optional[str], cluster_id: Optional[str] = None) -> Optional[IssueCluster]:
+def get_cluster(project_id: str, cluster_id: str) -> Optional[IssueCluster]:
     """
-    Compatibility wrapper: if only cluster_id is provided, project_id may be None.
+    Retrieve a cluster by project and cluster ID.
     """
-    if cluster_id is None:
-        # Called as get_cluster(cluster_id)
-        return _STORE.get_cluster(None, project_id)  # type: ignore[arg-type]
     return _STORE.get_cluster(project_id, cluster_id)
+
+
+def get_cluster_by_id(cluster_id: str) -> Optional[IssueCluster]:
+    """
+    Legacy: retrieve a cluster by ID only (scans all projects).
+    
+    Note: This only works with stores that support project_id=None (currently InMemoryStore).
+    For RedisStore, use get_cluster(project_id, cluster_id) instead.
+    """
+    # Only works with stores that accept Optional project_id
+    if hasattr(_STORE, "get_cluster"):
+        # Try to call with None project_id for backwards compatibility
+        # This will work for InMemoryStore but not RedisStore
+        try:
+            return _STORE.get_cluster(None, cluster_id)  # type: ignore[arg-type]
+        except (TypeError, AttributeError):
+            # RedisStore requires project_id, so this will fail
+            raise ValueError(
+                f"get_cluster_by_id requires project_id with {type(_STORE).__name__}. "
+                f"Use get_cluster(project_id, cluster_id) instead."
+            )
+    return None
 
 
 def get_all_clusters(project_id: Optional[str] = None) -> List[IssueCluster]:
