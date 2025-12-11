@@ -194,9 +194,11 @@ This section expands the high-level overview into more implementation detail so 
   - `feedback:created:{project_id}` for creation-time sorted sets
   - `feedback:source:{project_id}:{source}` for per-source indexes
   - `feedback:external:{project_id}:{source}:{external_id}` for deduplication lookups
+  - `feedback:unclustered:{project_id}` for unclustered feedback IDs
   - `cluster:{project_id}:{id}` for cluster metadata
   - `cluster:items:{project_id}:{cluster_id}` for cluster membership sets
   - `clusters:{project_id}:all` for cluster ID listings
+- Key usage split: canonical flows = dashboard → backend `/api/*` (always send `project_id`, use project-scoped keys); legacy/direct = dashboard vector pipeline or old routes hitting non-project keys (`feedback:unclustered`, `feedback:{uuid}`, `feedback:created`, `feedback:source:{source}`, `cluster:{id}`, `cluster:items:{id}`, `clusters:all`) — these are deprecated/only for internal pipelines.
 - The dashboard passes `project_id` in all proxy requests to backend endpoints (as query parameter or in request body).
 - The backend uses `project_id` to isolate and filter data per project throughout the storage layer. All store methods accept `project_id` parameters to scope lookups, writes, and deletions to the correct project namespace.
 
@@ -283,24 +285,27 @@ This section expands the high-level overview into more implementation detail so 
   - Custom Upstash REST client using `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
 - Uses hashes, sorted sets, and sets:
   - Feedback:
-    - Hash: `feedback:{uuid}` with ISO timestamps and metadata JSON.
-    - Sorted sets: `feedback:created`, `feedback:source:{source}`.
-    - String: `feedback:external:{source}:{external_id}` for dedupe.
+    - Hash: `feedback:{project_id}:{uuid}` (canonical); legacy hash: `feedback:{uuid}`.
+    - Sorted sets: `feedback:created:{project_id}`, `feedback:source:{project_id}:{source}` (canonical); legacy: `feedback:created`, `feedback:source:{source}`.
+    - String: `feedback:external:{project_id}:{source}:{external_id}` (canonical); legacy: `feedback:external:{source}:{external_id}`.
+    - Set: `feedback:unclustered:{project_id}` (canonical); legacy: `feedback:unclustered`.
   - Clusters:
-    - Hash: `cluster:{cluster_id}` with metadata (no `feedback_ids`).
-    - Set: `cluster:items:{cluster_id}` for `feedback_ids`.
-    - Set: `clusters:all` for listing cluster IDs.
+    - Hash: `cluster:{project_id}:{cluster_id}` (canonical); legacy hash: `cluster:{cluster_id}`.
+    - Set: `cluster:items:{project_id}:{cluster_id}` (canonical); legacy: `cluster:items:{cluster_id}`.
+    - Set: `clusters:{project_id}:all` (canonical); legacy: `clusters:all`.
   - Jobs:
     - Hash: `job:{job_id}`.
     - Sorted set: `cluster:jobs:{cluster_id}` for listing jobs per cluster.
   - Config:
     - String: `config:reddit:subreddits` as JSON array.
 - The public functions in `store.py` (`add_feedback_item`, `add_cluster`, etc.) hide the backing choice from the rest of the backend.
+- Key usage split: canonical = backend-proxied requests with `project_id`; legacy = direct dashboard/vector paths using non-project keys (deprecated, only for internal pipelines).
 
 ### Dashboard service (Next.js)
 
 - Proxies feedback/clusters/stats and Reddit config to the backend; backend is the single source of truth for those reads/writes.
 - Vector clustering routes (`/api/clusters/run`, `/api/clusters/run-vector`) still talk directly to Upstash Redis/Vector for embeddings and batch writes (legacy path).
+- Key usage split: canonical = dashboard proxies with `project_id` → backend `/api/*` → project-scoped keys; legacy/direct = vector routes hitting non-project keys (`feedback:unclustered`, `feedback:{uuid}`, `cluster:{id}`, `clusters:all`, etc.) — deprecated, keep only for internal pipelines.
 
 **API routes**
 - `GET /api/clusters`, `GET /api/clusters/[id]`, `GET /api/feedback`, `PUT /api/feedback`, `GET /api/stats`, `GET/POST /api/config/reddit/subreddits`:
@@ -317,12 +322,14 @@ This section expands the high-level overview into more implementation detail so 
     - Command: `[issue_url, '--job-id', job_id]` or `[issue_url]`.
     - Env: `BACKEND_URL`, `JOB_ID` (if any), and `GH_TOKEN` (if user is authenticated).
   - Used when a user clicks "Generate Fix" on a cluster from the dashboard UI.
+  - Canonical path: dashboard → backend `/api/*` with `project_id` → project-scoped keys.
 
 - **Automated syncing (backend)**: `POST /ingest/github/sync/{repo_name}`:
   - Operation order: (1) Fetches open issues from the specified GitHub repo (using optional `X-GitHub-Token` header for higher API rate limits), (2) Deduplicates by `external_id` using `get_feedback_by_external_id`, and (3) Auto-clusters them via `_auto_cluster_feedback` alongside other feedback sources (Reddit, Sentry, manual).
   - Accepts `project_id` as query parameter and stores all feedback items scoped to that project.
   - Intended for scheduled polling of external repos (can be triggered manually from dashboard's `/api/ingest/github/sync/[name]` proxy endpoint).
   - Both paths are now clearly distinguished: manual triggering is for user-initiated agent runs, while automated syncing is for bulk issue ingestion.
+  - Legacy note: vector pipeline still uses non-project keys for clustering; preferred path is project-scoped backend calls.
 
 ### Clustering and vector store (TS-side pipeline)
 

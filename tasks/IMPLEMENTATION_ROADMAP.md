@@ -13,6 +13,7 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
 ## Phase 1: Stabilize Ingestion + feedback:unclustered Semantics
 **Worktree:** `worktrees/system-readiness`  
 **Reference:** `documentation/ingestion_polling_architecture_plan.md` Phase 1
+**Note:** Detailed day-by-day tasks from `tasks/PHASE1_CHECKLIST.md` have been consolidated here.
 
 ### Backend Tasks
 - [x] **File: `backend/store.py`**
@@ -39,7 +40,7 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
 
 ### Testing
 - [ ] **File: `backend/tests/test_ingestion.py`**
-  - [ ] Test `add_feedback_item()` writes to all 4 Redis keys
+  - [x] Test `add_feedback_item()` writes to all 4 Redis keys
   - [x] Test `feedback:unclustered` contains new items
   - [ ] Test each ingest endpoint produces consistent `FeedbackItem` shape
   - [x] Test duplicate detection (if implemented)
@@ -49,6 +50,8 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
 - ✅ All ingest sources produce identical data shape
 - ✅ Tests cover happy path + edge cases
 - ✅ Redis key patterns documented in `documentation/db_design.md`
+- ✅ Ingest endpoints emit logging for `feedback_id` and `source`
+- 🎯 Tests target >80% coverage on store/ingestion paths
 - ℹ️ Current deployment supports GitHub ingestion only; Reddit/Sentry are deferred to Phase 2.
 
 ---
@@ -135,6 +138,7 @@ This roadmap prioritizes stabilizing your **ingestion moat** before investing in
 ## Phase 4: Build Clustering Worker
 **Worktree:** `worktrees/system-readiness`  
 **Reference:** `documentation/clustering_worker_architecture_plan.md`
+**Current state:** Clustering runs in dashboard today (`dashboard/lib/clustering.ts`, `dashboard/lib/vector.ts`, `/api/clusters/run`). This phase migrates that logic into a backend worker.
 
 ### Step 1: Extract Pure Clustering Module
 - [ ] **File: `backend/clustering.py`** (NEW)
