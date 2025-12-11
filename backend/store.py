@@ -895,6 +895,26 @@ class RedisStore:
                 self._feedback_unclustered_key(project_id), str(feedback_id)
             )
 
+    def remove_from_unclustered_batch(self, pairs: List[Tuple[UUID, str]]):
+        """
+        Batch remove items from unclustered sets. Expects list of (feedback_id, project_id).
+        """
+        if not pairs:
+            return
+
+        if self.mode == "redis":
+            pipe = self.client.pipeline()
+            for fid, project_id in pairs:
+                pipe.srem(self._feedback_unclustered_key(str(project_id)), str(fid))
+            pipe.execute()
+        else:
+            commands = [
+                ["SREM", self._feedback_unclustered_key(str(project_id)), str(fid)]
+                for fid, project_id in pairs
+            ]
+            if commands:
+                self.client.pipeline_exec(commands)
+
     def update_feedback_item(self, project_id: str, item_id: UUID, **updates) -> FeedbackItem:
         """
         Update mutable fields of a feedback item in Redis and return the updated object.
@@ -1216,6 +1236,80 @@ class RedisStore:
         except ValueError:
             return None
 
+    def get_feedback_by_external_ids_batch(
+        self, project_id: UUID, source: str, external_ids: List[str]
+    ) -> Dict[str, FeedbackItem]:
+        """
+        Batch resolve feedback items by their external identifiers within a project.
+
+        Uses pipelined GET + HGETALL to minimize network requests (critical for Upstash REST).
+        Returns a mapping of external_id -> FeedbackItem for all found items.
+        """
+        if not external_ids:
+            return {}
+
+        project_id_str = str(project_id)
+        deduped_external_ids = list(dict.fromkeys([eid for eid in external_ids if eid]))
+        if not deduped_external_ids:
+            return {}
+
+        # Step 1: batch GET external_id -> feedback_id mappings
+        ext_key_pairs = [
+            (eid, self._feedback_external_key(project_id_str, source, eid))
+            for eid in deduped_external_ids
+        ]
+
+        existing_ids: Dict[str, str] = {}
+        if self.mode == "redis":
+            pipe = self.client.pipeline()
+            for _, key in ext_key_pairs:
+                pipe.get(key)
+            results = pipe.execute()
+        else:
+            commands = [["GET", key] for _, key in ext_key_pairs]
+            results = self.client.pipeline_exec(commands)
+
+        for (ext_id, _), value in zip(ext_key_pairs, results):
+            if value:
+                existing_ids[ext_id] = value
+
+        if not existing_ids:
+            return {}
+
+        # Step 2: batch HGETALL feedback hashes for found IDs
+        fetch_pairs = []
+        for ext_id, fid in existing_ids.items():
+            try:
+                feedback_uuid = UUID(fid)
+            except ValueError:
+                continue
+            fetch_pairs.append((ext_id, self._feedback_key(project_id_str, feedback_uuid)))
+
+        if not fetch_pairs:
+            return {}
+
+        keys_to_fetch = [key for _, key in fetch_pairs]
+        batch_results = self._hgetall_batch(keys_to_fetch)
+
+        resolved: Dict[str, FeedbackItem] = {}
+        for (ext_id, _), data in zip(fetch_pairs, batch_results):
+            if not data:
+                continue
+            parsed = dict(data)
+            if isinstance(parsed.get("created_at"), str):
+                parsed["created_at"] = _iso_to_dt(parsed["created_at"])
+            if isinstance(parsed.get("metadata"), str):
+                try:
+                    parsed["metadata"] = json.loads(parsed["metadata"])
+                except json.JSONDecodeError:
+                    parsed["metadata"] = {}
+            try:
+                resolved[ext_id] = FeedbackItem(**parsed)
+            except (ValueError, TypeError):
+                continue
+
+        return resolved
+
     # Users / Projects
     def create_user_with_default_project(self, user: User, default_project: Project) -> Project:
         """
@@ -1383,6 +1477,68 @@ class RedisStore:
             # Use REST client's batch method
             return self.client.hgetall_batch(keys)
 
+    def add_feedback_items_batch(self, items: List[FeedbackItem]) -> List[FeedbackItem]:
+        """
+        Batch add FeedbackItems using pipeline to reduce network overhead (especially Upstash REST).
+        """
+        if not items:
+            return []
+
+        if self.mode == "redis":
+            pipe = self.client.pipeline()
+            for item in items:
+                payload = item.model_dump()
+                if isinstance(payload.get("created_at"), datetime):
+                    payload["created_at"] = _dt_to_iso(payload["created_at"])
+                if isinstance(payload.get("metadata"), dict):
+                    payload["metadata"] = json.dumps(payload["metadata"])
+
+                hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+                project_id = str(item.project_id)
+                key = self._feedback_key(project_id, item.id)
+                ts = item.created_at.timestamp() if isinstance(item.created_at, datetime) else time.time()
+
+                pipe.hset(key, mapping=hash_payload)
+                pipe.zadd(self._feedback_created_key(project_id), {str(item.id): ts})
+                pipe.zadd(self._feedback_source_key(project_id, item.source), {str(item.id): ts})
+                pipe.sadd(self._feedback_unclustered_key(project_id), str(item.id))
+                if item.external_id:
+                    pipe.set(
+                        self._feedback_external_key(project_id, item.source, item.external_id),
+                        str(item.id),
+                    )
+            pipe.execute()
+        else:
+            commands: List[List[str]] = []
+            for item in items:
+                payload = item.model_dump()
+                if isinstance(payload.get("created_at"), datetime):
+                    payload["created_at"] = _dt_to_iso(payload["created_at"])
+                if isinstance(payload.get("metadata"), dict):
+                    payload["metadata"] = json.dumps(payload["metadata"])
+
+                hash_payload = {k: str(v) for k, v in payload.items() if v is not None}
+                project_id = str(item.project_id)
+                key = self._feedback_key(project_id, item.id)
+                ts = item.created_at.timestamp() if isinstance(item.created_at, datetime) else time.time()
+
+                hset_cmd = ["HSET", key]
+                for field, value in hash_payload.items():
+                    hset_cmd.extend([field, value])
+                commands.append(hset_cmd)
+
+                commands.append(["ZADD", self._feedback_created_key(project_id), str(ts), str(item.id)])
+                commands.append(["ZADD", self._feedback_source_key(project_id, item.source), str(ts), str(item.id)])
+                commands.append(["SADD", self._feedback_unclustered_key(project_id), str(item.id)])
+                if item.external_id:
+                    commands.append(
+                        ["SET", self._feedback_external_key(project_id, item.source, item.external_id), str(item.id)]
+                    )
+
+            self.client.pipeline_exec(commands)
+
+        return items
+
 
 # ---------- Store selector ----------
 
@@ -1402,6 +1558,15 @@ _STORE = _select_store()
 # Public API (delegates to current store)
 def add_feedback_item(item: FeedbackItem) -> FeedbackItem:
     return _STORE.add_feedback_item(item)
+
+
+def add_feedback_items_batch(items: List[FeedbackItem]) -> List[FeedbackItem]:
+    """
+    Batch add feedback items. Falls back to individual adds when batch not supported.
+    """
+    if hasattr(_STORE, "add_feedback_items_batch"):
+        return _STORE.add_feedback_items_batch(items)
+    return [add_feedback_item(item) for item in items]
 
 
 def get_feedback_item(project_id: str, item_id: UUID) -> Optional[FeedbackItem]:
@@ -1443,6 +1608,23 @@ def get_feedback_by_external_id(project_id: str, source: str, external_id: str) 
         if item.project_id == project_id and item.source == source and item.external_id == external_id:
             return item
     return None
+
+
+def get_feedback_by_external_ids_batch(
+    project_id: str, source: str, external_ids: List[str]
+) -> Dict[str, FeedbackItem]:
+    """
+    Batch lookup by external IDs. Falls back to individual lookups when batch not supported.
+    """
+    if hasattr(_STORE, "get_feedback_by_external_ids_batch"):
+        return _STORE.get_feedback_by_external_ids_batch(project_id, source, external_ids)
+
+    results: Dict[str, FeedbackItem] = {}
+    for ext_id in external_ids:
+        existing = get_feedback_by_external_id(project_id, source, ext_id)
+        if existing:
+            results[ext_id] = existing
+    return results
 
 
 def clear_feedback_items(project_id: Optional[str] = None):
@@ -1585,6 +1767,16 @@ def remove_from_unclustered(feedback_id: UUID, project_id: str):
     	project_id (str): ID of the project that owns the unclustered set.
     """
     return _STORE.remove_from_unclustered(feedback_id, project_id)
+
+
+def remove_from_unclustered_batch(pairs: List[Tuple[UUID, str]]):
+    """
+    Batch remove feedback items from unclustered sets. Falls back to individual calls.
+    """
+    if hasattr(_STORE, "remove_from_unclustered_batch"):
+        return _STORE.remove_from_unclustered_batch(pairs)
+    for fid, project_id in pairs:
+        remove_from_unclustered(fid, project_id)
 
 
 # User / Project API
