@@ -26,7 +26,7 @@ describe('API /api/ingest/github/sync/[name]', () => {
   const token = 'gho_test_token';
 
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_BACKEND_URL = backendUrl;
+    process.env.BACKEND_URL = backendUrl;
     jest.clearAllMocks();
     (global.fetch as any) = jest.fn();
   });

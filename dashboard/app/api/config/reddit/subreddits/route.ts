@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireProjectId } from '@/lib/project';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Fetches stored Reddit subreddits for the project identified in the incoming request.

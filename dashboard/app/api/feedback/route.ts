@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireProjectId } from '@/lib/project';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Retrieve feedback entries for the project identified in the request.

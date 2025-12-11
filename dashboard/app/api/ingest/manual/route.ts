@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireProjectId } from '@/lib/project';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Proxy manual ingestion to the backend API.

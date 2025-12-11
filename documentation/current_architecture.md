@@ -291,7 +291,7 @@ This section expands the high-level overview into more implementation detail so 
 
 **API routes**
 - `GET /api/clusters`, `GET /api/clusters/[id]`, `GET /api/feedback`, `PUT /api/feedback`, `GET /api/stats`, `GET/POST /api/config/reddit/subreddits`:
-  - Proxy to backend (`NEXT_PUBLIC_BACKEND_URL`) with `project_id`.
+  - Proxy to backend (`BACKEND_URL`) with `project_id`.
 - `POST /api/clusters/[id]/start_fix`:
   - Fetches cluster from backend (`GET {BACKEND_URL}/clusters/{id}`) to leverage backend’s notion of cluster fields.
   - Deduces repo owner/name from `github_repo_url` or defaults (for manual clusters).

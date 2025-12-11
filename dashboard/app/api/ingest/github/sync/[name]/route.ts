@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProjectId } from '@/lib/project';
 import { getGitHubToken } from '@/lib/auth';
 
-const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Proxy GitHub sync to the backend ingestion API.
