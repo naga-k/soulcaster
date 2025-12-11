@@ -99,7 +99,7 @@ class UpstashRESTClient:
             keys: List of Redis hash keys to fetch
         
         Returns:
-            List of dicts, one per key. Empty dict if key doesn't exist.
+            List of dicts, one per key. Empty dict if key doesn't exist or has invalid data.
         """
         if not keys:
             return []
@@ -108,6 +108,10 @@ class UpstashRESTClient:
         parsed = []
         for result in results:
             if not result:
+                parsed.append({})
+            elif len(result) % 2 != 0:
+                # Invalid response: odd number of elements, skip this entry
+                logger.warning("HGETALL returned odd number of elements, skipping")
                 parsed.append({})
             else:
                 # Convert list to dict: ["field1", "value1", ...] -> {"field1": "value1", ...}
@@ -786,18 +790,21 @@ class RedisStore:
             if not data:
                 continue
             try:
+                # Create a copy to avoid modifying the original
+                parsed = dict(data)
+                
                 # Parse fields
-                if isinstance(data.get("created_at"), str):
-                    data["created_at"] = _iso_to_dt(data["created_at"])
+                if isinstance(parsed.get("created_at"), str):
+                    parsed["created_at"] = _iso_to_dt(parsed["created_at"])
                 
                 # Parse metadata from JSON string if it's a string
-                if isinstance(data.get("metadata"), str):
+                if isinstance(parsed.get("metadata"), str):
                     try:
-                        data["metadata"] = json.loads(data["metadata"])
+                        parsed["metadata"] = json.loads(parsed["metadata"])
                     except json.JSONDecodeError:
-                        data["metadata"] = {}
+                        parsed["metadata"] = {}
                 
-                items.append(FeedbackItem(**data))
+                items.append(FeedbackItem(**parsed))
             except (ValueError, TypeError) as e:
                 logger.debug("Failed to parse FeedbackItem at index %d: %s", i, e)
                 continue
@@ -827,18 +834,21 @@ class RedisStore:
             if not data:
                 continue
             try:
+                # Create a copy to avoid modifying the original
+                parsed = dict(data)
+                
                 # Parse fields
-                if isinstance(data.get("created_at"), str):
-                    data["created_at"] = _iso_to_dt(data["created_at"])
+                if isinstance(parsed.get("created_at"), str):
+                    parsed["created_at"] = _iso_to_dt(parsed["created_at"])
                 
                 # Parse metadata from JSON string if it's a string
-                if isinstance(data.get("metadata"), str):
+                if isinstance(parsed.get("metadata"), str):
                     try:
-                        data["metadata"] = json.loads(data["metadata"])
+                        parsed["metadata"] = json.loads(parsed["metadata"])
                     except json.JSONDecodeError:
-                        data["metadata"] = {}
+                        parsed["metadata"] = {}
                 
-                items.append(FeedbackItem(**data))
+                items.append(FeedbackItem(**parsed))
             except (ValueError, TypeError) as e:
                 logger.debug("Failed to parse unclustered FeedbackItem: %s", e)
                 continue

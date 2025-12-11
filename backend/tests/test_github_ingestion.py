@@ -185,9 +185,11 @@ class _FakeRedisPipeline:
 
     def execute(self):
         results = []
-        for cmd, key in self._commands:
+        for cmd, *args in self._commands:
             if cmd == "hgetall":
-                results.append(self._fake.hgetall(key))
+                results.append(self._fake.hgetall(args[0]))
+            else:
+                raise NotImplementedError(f"_FakeRedisPipeline does not support command: {cmd}")
         return results
 
 
