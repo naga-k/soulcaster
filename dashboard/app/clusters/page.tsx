@@ -5,6 +5,16 @@ import Link from 'next/link';
 import type { ClusterListItem } from '@/types';
 import SourceConfig from '@/components/SourceConfig';
 
+type ClusterJobStatus = {
+  id: string;
+  status: 'pending' | 'running' | 'succeeded' | 'failed';
+  created_at?: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+  stats?: Record<string, number>;
+};
+
 /**
  * Display the Issue Clusters page and manage its loading, error, empty, and populated states.
  *
@@ -20,7 +30,12 @@ export default function ClustersListPage() {
   const [error, setError] = useState<string | null>(null);
   const [unclusteredCount, setUnclusteredCount] = useState(0);
   const [showConfig, setShowConfig] = useState(false);
-  const isClustering = unclusteredCount > 0;
+  const [latestJob, setLatestJob] = useState<ClusterJobStatus | null>(null);
+  const [jobActionError, setJobActionError] = useState<string | null>(null);
+  const [jobActionLoading, setJobActionLoading] = useState(false);
+
+  const jobIsRunning = latestJob?.status === 'running';
+  const isClustering = unclusteredCount > 0 || jobIsRunning;
 
   useEffect(() => {
     loadClustersAndAutoCluster();
@@ -28,7 +43,7 @@ export default function ClustersListPage() {
 
   const loadClustersAndAutoCluster = async () => {
     await fetchClusters();
-    await fetchUnclusteredCount();
+    await Promise.all([fetchUnclusteredCount(), fetchLatestJob()]);
   };
 
   const fetchClusters = async () => {
@@ -60,6 +75,66 @@ export default function ClustersListPage() {
       console.error('Failed to fetch unclustered count:', err);
     }
     return 0;
+  };
+
+  const fetchLatestJob = async () => {
+    try {
+      const response = await fetch('/api/clusters/jobs?limit=1', {
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setLatestJob(data[0]);
+          return data[0];
+        }
+        setLatestJob(null);
+        return null;
+      }
+      console.error('Failed to fetch cluster jobs status');
+    } catch (err) {
+      console.error('Failed to fetch cluster jobs status:', err);
+    }
+    setLatestJob(null);
+    return null;
+  };
+
+  const triggerClustering = async () => {
+    setJobActionError(null);
+    setJobActionLoading(true);
+    try {
+      const response = await fetch('/api/clusters/jobs', { method: 'POST' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to start clustering');
+      }
+      await Promise.all([fetchUnclusteredCount(), fetchLatestJob()]);
+    } catch (err) {
+      console.error('Failed to trigger clustering:', err);
+      setJobActionError(err instanceof Error ? err.message : 'Failed to start clustering');
+    } finally {
+      setJobActionLoading(false);
+    }
+  };
+
+  const formatTimestamp = (value?: string | null) => {
+    if (!value) return 'unknown time';
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return value;
+    }
+  };
+
+  const jobStatusPill = () => {
+    if (!latestJob) {
+      return 'No clustering runs yet';
+    }
+    if (latestJob.status === 'running') {
+      return `Job running since ${formatTimestamp(latestJob.started_at || latestJob.created_at)}`;
+    }
+    const finishedAt = latestJob.finished_at || latestJob.started_at || latestJob.created_at;
+    return `Last job ${latestJob.status} @ ${formatTimestamp(finishedAt)}`;
   };
 
   // Clustering is backend-owned and runs automatically after ingestion. The UI keeps a lightweight
@@ -124,6 +199,16 @@ export default function ClustersListPage() {
               : 'Clustering runs automatically right after you sync sources.'}
           </p>
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            {unclusteredCount > 0 && (
+              <button
+                onClick={triggerClustering}
+                disabled={jobActionLoading || jobIsRunning}
+                className={`w-full sm:w-auto px-6 py-3 border border-transparent text-sm font-bold rounded-full shadow-neon-green text-black bg-matrix-green hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-matrix-green disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wide ${jobActionLoading || jobIsRunning ? 'animate-pulse' : ''
+                  }`}
+              >
+                {jobIsRunning ? 'Clustering in progress…' : jobActionLoading ? 'Starting clustering…' : 'Retry Clustering'}
+              </button>
+            )}
             <button
               onClick={() => setShowConfig(!showConfig)}
               className={`w-full sm:w-auto px-6 py-3 border border-purple-200 text-sm font-semibold rounded-full text-purple-900 bg-white hover:bg-purple-50 transition-all ${showConfig ? 'ring-2 ring-purple-200' : ''
@@ -132,6 +217,9 @@ export default function ClustersListPage() {
               {showConfig ? 'Hide Source Settings' : 'Configure Sources'}
             </button>
           </div>
+          {jobActionError && (
+            <p className="mt-3 text-sm text-red-600">{jobActionError}</p>
+          )}
           {showConfig && (
             <div className="mt-6 text-left">
               <SourceConfig />
@@ -151,8 +239,23 @@ export default function ClustersListPage() {
             <p className="mt-2 text-gray-400">
               Grouped feedback items ready for analysis and action.
             </p>
+            <p className="mt-1 text-sm text-gray-500">
+              {unclusteredCount > 0
+                ? `${unclusteredCount} unclustered item${unclusteredCount === 1 ? '' : 's'} waiting to process.`
+                : 'No unclustered feedback detected.'}
+            </p>
           </div>
           <div className="flex gap-3">
+            {unclusteredCount > 0 && (
+              <button
+                onClick={triggerClustering}
+                disabled={jobActionLoading || jobIsRunning}
+                className={`px-6 py-3 border border-transparent text-sm font-bold rounded-full shadow-neon-green text-black bg-matrix-green hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-matrix-green disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wide ${jobActionLoading || jobIsRunning ? 'animate-pulse' : ''
+                  }`}
+              >
+                {jobIsRunning ? 'Clustering in progress…' : jobActionLoading ? 'Starting clustering…' : 'Retry Clustering'}
+              </button>
+            )}
             <button
               onClick={() => setShowConfig(!showConfig)}
               className={`px-4 py-3 border border-white/10 text-sm font-medium rounded-full text-slate-300 hover:bg-white/5 transition-all ${showConfig ? 'bg-white/10 text-white' : ''}`}
@@ -161,6 +264,11 @@ export default function ClustersListPage() {
             </button>
           </div>
         </div>
+        {jobActionError && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {jobActionError}
+          </div>
+        )}
 
         {showConfig && (
           <div className="mb-8 animate-in slide-in-from-top-4 fade-in duration-300">
@@ -194,11 +302,19 @@ export default function ClustersListPage() {
                   Active Clusters
                 </h2>
               </div>
-            <div className="flex gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-900/60 bg-emerald-900/20 px-4 py-2 text-xs font-medium text-emerald-200">
-                Clustering runs automatically after feedback ingestion
-              </span>
-            </div>
+              <div className="flex flex-col gap-2 text-right sm:text-left">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-900/60 bg-emerald-900/20 px-4 py-2 text-xs font-medium text-emerald-200">
+                  Clustering runs automatically after feedback ingestion
+                </span>
+                <span className="text-xs font-medium uppercase tracking-wide text-emerald-200/80">
+                  {jobStatusPill()}
+                </span>
+                {latestJob?.error && (
+                  <span className="text-xs text-red-300">
+                    Last error: {latestJob.error}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-white/5 bg-black/40 backdrop-blur-sm">
