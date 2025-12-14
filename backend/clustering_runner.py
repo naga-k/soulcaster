@@ -29,6 +29,7 @@ from store import (
 import clustering
 
 logger = logging.getLogger(__name__)
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
 def _test_embed(texts):
@@ -75,7 +76,7 @@ def _build_cluster(item_group: List[FeedbackItem]) -> IssueCluster:
     """
     Builds a new IssueCluster from a non-empty list of FeedbackItem objects.
     
-    The returned cluster groups the provided feedback items: it assigns a new UUID as the cluster id, sets the cluster's project_id from the first item, derives the title and summary from the first item (summary limited to 200 characters if a body exists), collects the feedback item ids, sets status to "new", and sets created_at/updated_at to the current UTC time.
+    The returned cluster groups the provided feedback items: it assigns a new UUID as the cluster id, sets the cluster's project_id from the first item, derives and truncates the title/summary from the first item (summary limited to 300 characters), collects the feedback item ids, sets status to "new", and sets created_at/updated_at to the current UTC time.
     
     Parameters:
         item_group (List[FeedbackItem]): A non-empty list of feedback items to include in the cluster.
@@ -85,8 +86,10 @@ def _build_cluster(item_group: List[FeedbackItem]) -> IssueCluster:
     """
     now = datetime.now(timezone.utc)
     first = item_group[0]
-    summary = first.body[:200] if first.body else "Feedback cluster"
-    title = first.title or "Feedback cluster"
+    raw_title = first.title or "Feedback cluster"
+    raw_summary = first.body or "Feedback cluster"
+    title = raw_title[:80]
+    summary = raw_summary[:300]
     feedback_ids = [str(item.id) for item in item_group]
     return IssueCluster(
         id=str(uuid4()),
@@ -126,10 +129,10 @@ async def maybe_start_clustering(project_id: str) -> ClusterJob:
     Create a new clustering job for the given project, attempt to acquire the per-project clustering lock, and schedule the background clustering runner if the lock is obtained.
     
     Parameters:
-    	project_id (str): Project identifier for which to create and (if possible) start clustering.
+        project_id (str): Project identifier for which to create and (if possible) start clustering.
     
     Returns:
-    	job (ClusterJob): The created ClusterJob record (status "pending"). If the per-project lock was not acquired, no background task will be scheduled and the returned job remains pending.
+        ClusterJob: The persisted ClusterJob record. When the lock is already held the job is immediately marked failed with an explanatory error; otherwise a background task is launched to process clustering work.
     """
     job_id = str(uuid4())
     now = datetime.now(timezone.utc)
@@ -145,10 +148,19 @@ async def maybe_start_clustering(project_id: str) -> ClusterJob:
     locked = acquire_cluster_lock(project_id, job_id, ttl_seconds=600)
     if not locked:
         logger.info("Clustering already running for project %s", project_id)
+        job = update_cluster_job(
+            project_id,
+            job_id,
+            status="failed",
+            error="Clustering already running for project",
+            finished_at=datetime.now(timezone.utc),
+        )
         return job
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(run_clustering_job(project_id, job_id))
+    loop = asyncio.get_running_loop()
+    task = loop.create_task(run_clustering_job(project_id, job_id))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return job
 
 

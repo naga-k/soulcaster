@@ -129,8 +129,9 @@ async def test_maybe_start_clustering_respects_lock(monkeypatch):
     monkeypatch.setattr(clustering_core, "cluster_issues", fake_cluster_issues)
 
     job = await clustering_runner.maybe_start_clustering(project_id)
-    # Because lock was held, the job should remain pending and not process data
-    assert job.status == "pending"
+    # Because lock was held, the job should not run and is marked failed with an explanatory error
+    assert job.status == "failed"
+    assert job.error == "Clustering already running for project"
 
     # Release lock for cleanup
     clustering_runner.release_cluster_lock(project_id, "existing-job")
