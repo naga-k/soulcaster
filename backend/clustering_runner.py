@@ -187,7 +187,6 @@ async def run_clustering_job(project_id: str, job_id: str):
                 finished_at=datetime.now(timezone.utc),
                 stats={"clustered": 0, "new_clusters": 0, "singletons": 0},
             )
-            release_cluster_lock(project_id, job_id)
             return
 
         testing_mode = bool(os.getenv("PYTEST_CURRENT_TEST")) or not bool(
@@ -195,7 +194,7 @@ async def run_clustering_job(project_id: str, job_id: str):
         )
 
         if testing_mode:
-            # In tests, avoid external embeddings and keep unclustered items intact.
+            # In tests, avoid external embeddings but still drain unclustered feedback to mimic production semantics.
             # Create a single cluster only if none exist yet. Use Reddit-style title when present.
             existing_clusters = get_all_clusters(project_id)
             if not existing_clusters:
@@ -218,9 +217,8 @@ async def run_clustering_job(project_id: str, job_id: str):
                 grouped_clusters = [cluster]
                 for cluster in grouped_clusters:
                     add_cluster(cluster)
-                # Remove processed items from unclustered so tests expecting empty set pass
-                processed_pairs = [(item.id, project_id) for item in items]
-                remove_from_unclustered_batch(processed_pairs)
+            processed_pairs = [(item.id, project_id) for item in items]
+            remove_from_unclustered_batch(processed_pairs)
             stats = {
                 "clustered": len(items),
                 "new_clusters": 0 if existing_clusters else 1,
@@ -262,7 +260,7 @@ async def run_clustering_job(project_id: str, job_id: str):
             stats=stats,
         )
     except Exception as exc:  # pragma: no cover - exercised in integration
-        logger.exception("Clustering job %s failed: %s", job_id, exc)
+        logger.exception("Clustering job %s failed", job_id)
         update_cluster_job(
             project_id,
             job_id,
