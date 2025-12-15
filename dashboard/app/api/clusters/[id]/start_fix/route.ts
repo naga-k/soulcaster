@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireProjectId } from '@/lib/project';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
@@ -11,6 +12,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const projectId = await requireProjectId(request);
 
     // Validate ID format (UUID or numeric)
     if (!id || !/^[a-zA-Z0-9-]+$/.test(id)) {
@@ -19,14 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Direct proxy to backend
     // Backend expects optional project_id query param
-    const backendUrl = `${BACKEND_URL}/clusters/${encodeURIComponent(id)}/start_fix`;
+    const backendUrl = `${BACKEND_URL}/clusters/${encodeURIComponent(id)}/start_fix?project_id=${projectId}`;
 
-    // If we had a project_id in the request url search params, pass it along
-    // const { searchParams } = new URL(request.url);
-    // const projectId = searchParams.get('project_id');
-    // const url = projectId ? `${backendUrl}?project_id=${projectId}` : backendUrl;
-
-    // For now, assuming default project / implicit context
     const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
@@ -46,7 +42,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'project_id is required') {
+      return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
+    }
     console.error('Error starting fix:', error);
     return NextResponse.json({ error: 'Failed to start fix' }, { status: 500 });
   }

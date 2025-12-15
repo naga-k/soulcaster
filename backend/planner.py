@@ -74,7 +74,7 @@ Your plan should include:
 
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-pro-002",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

@@ -146,54 +146,77 @@ class SandboxKilocodeRunner(AgentRunner):
             await self._fail_job(job.id, "e2b SDK missing")
             return
 
-        logger.info(f"Starting sandbox job {job.id} for plan {plan.id}")
-        update_job(job.id, status="running", logs="Initializing sandbox environment...")
-
-        # Prepare Environment Variables
-        env_vars = {
-            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
-            "GH_TOKEN": os.getenv("GH_TOKEN", os.getenv("GITHUB_TOKEN", "")),
-            "REPO_URL": cluster.github_repo_url or "",
-            "KILO_API_MODEL_ID": os.getenv("KILO_API_MODEL_ID", "gemini-2.5-flash-preview-04-17"),
-        }
-        
-        if not env_vars["REPO_URL"]:
-             # Fallback if repo url not on cluster, try to construct? or fail
-             await self._fail_job(job.id, "Cluster missing github_repo_url")
-             return
-
         try:
-            # Create Sandbox
-            # We assume 'base' template or similar has: python3, git, gh, kilocode (via pip install?)
-            # If kilocode not in template, we must install it.
-            async with Sandbox.create(template=KILOCODE_TEMPLATE_ID, envs=env_vars) as sandbox:
-                await self._log(job.id, "Sandbox created.")
+             logger.info(f"Starting sandbox job {job.id} for plan {plan.id}")
+             try:
+                 update_job(job.id, status="running", logs="Initializing sandbox environment...")
+             except Exception as update_err:
+                 logger.error(f"Failed to update job status: {update_err}")
+                 raise update_err
 
-                # Install dependencies if needed
-                # Ideally the template has them. If not, this adds overhead.
-                # await sandbox.commands.run("pip install kilocode")
-                
+             # Prepare Environment Variables
+             env_vars = {
+                 "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
+                 "GH_TOKEN": os.getenv("GH_TOKEN", os.getenv("GITHUB_TOKEN", "")),
+                 "REPO_URL": cluster.github_repo_url or "",
+                 "KILO_API_MODEL_ID": os.getenv("KILO_API_MODEL_ID", "gemini-2.5-flash-preview-04-17"),
+             }
+             
+             if not env_vars["REPO_URL"]:
+                  # Fallback if repo url not on cluster, try to construct? or fail
+                  await self._fail_job(job.id, "Cluster missing github_repo_url")
+                  return
+
+             logger.info(f"Preparing environment for job {job.id}...")
+             # Create Sandbox
+             # We assume the template (KILOCODE_TEMPLATE_ID) already has 'kilocode' installed via e2b.Dockerfile.
+             # If not, the script execution might fail or we'd need to add 'pip install' here.
+             logger.info(f"Creating sandbox with template ID: {KILOCODE_TEMPLATE_ID}")
+             sandbox = Sandbox.create(template=KILOCODE_TEMPLATE_ID, envs=env_vars)
+             try:
+                await self._log(job.id, "Sandbox created.")
+                logger.info(f"Sandbox created: {sandbox.sandbox_id}")
+
                 # Upload Agent Script and Plan
                 await self._log(job.id, "Uploading context...")
-                await sandbox.files.write("/tmp/agent_script.py", AGENT_SCRIPT)
-                await sandbox.files.write("/tmp/plan.json", plan.model_dump_json())
+                logger.info("Uploading agent script and plan...")
+                sandbox.files.write("/tmp/agent_script.py", AGENT_SCRIPT)
+                sandbox.files.write("/tmp/plan.json", plan.model_dump_json())
+                logger.info("Context uploaded.")
 
                 # Execute Script
                 await self._log(job.id, "Executing agent script...")
+                logger.info("Starting execution of agent script...")
                 
                 # Run and stream logs
-                # e2b SDK: sandbox.commands.run returns a result, logs can be streamed via callbacks
-                # Note: API might have changed slightly in recent e2b versions (e.g. sandbox.process.start)
-                # But sandbox.commands.run is standard for sync-like waiting with output.
-                # To stream, use on_stdout/on_stderr
+                # In sync mode, on_stdout might be called synchronously? 
+                # We need to adapt handle_stdout/stderr to be sync or wrap them?
+                # E2B sync client typically expects sync callbacks.
+                # But our _log method is async! verify later.
+                # If we pass async func to sync callback, it might return a coroutine and not await it.
+                # We might need to run_coroutine_threadsafe if we are in a loop.
+                # Or just use print for now? 
+                # Ideally, we define sync wrappers that call async_to_sync or similar.
+                # Given we are in an async start() method, we have a running loop.
                 
-                async def handle_stdout(output):
-                    await self._log(job.id, output.line)
+                def handle_stdout(output):
+                    # Trying to schedule async log on existing loop
+                    try:
+                        loop = asyncio.get_running_loop()
+                        if loop.is_running():
+                             asyncio.run_coroutine_threadsafe(self._log(job.id, output.line), loop)
+                    except:
+                        pass
 
-                async def handle_stderr(output):
-                    await self._log(job.id, f"[ERR] {output.line}")
+                def handle_stderr(output):
+                    try:
+                        loop = asyncio.get_running_loop()
+                        if loop.is_running():
+                             asyncio.run_coroutine_threadsafe(self._log(job.id, f"[ERR] {output.line}"), loop)
+                    except:
+                        pass
 
-                proc = await sandbox.commands.run(
+                proc = sandbox.commands.run(
                     "python3 /tmp/agent_script.py",
                     on_stdout=handle_stdout,
                     on_stderr=handle_stderr,
@@ -208,6 +231,10 @@ class SandboxKilocodeRunner(AgentRunner):
                      update_job(job.id, status="success", logs=f"{job.logs}\nSuccess.")
                 else:
                      await self._fail_job(job.id, f"Agent script exited with code {proc.exit_code}")
+            
+             finally:
+                if sandbox:
+                    sandbox.kill()
 
         except Exception as e:
             logger.exception(f"Job {job.id} failed in sandbox")
@@ -226,3 +253,4 @@ class SandboxKilocodeRunner(AgentRunner):
     async def _fail_job(self, job_id: UUID, error: str):
         update_job(job_id, status="failed", logs=f"Error: {error}")
 
+register_runner("sandbox_kilo", SandboxKilocodeRunner)
