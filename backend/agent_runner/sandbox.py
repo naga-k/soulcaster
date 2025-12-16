@@ -12,7 +12,7 @@ except ImportError:
     AsyncSandbox = None
 
 from models import AgentJob, CodingPlan, IssueCluster
-from store import append_job_log, get_job, update_job
+from store import append_job_log, get_job, update_job, update_cluster
 from agent_runner import AgentRunner, register_runner
 
 logger = logging.getLogger(__name__)
@@ -370,8 +370,62 @@ def main():
     branch_name = f"fix/soulcaster-{int(time.time())}"
     run_command(f"git checkout -b {branch_name}", cwd=cwd)
 
+    # 6. Create empty commit and push to create draft PR early
+    log("Creating initial commit and draft PR...")
+    commit_title = f"WIP: {plan['title']}"
+    run_command(f"git commit --allow-empty -m {json.dumps(commit_title)}", cwd=cwd)
 
-    
+    # Push branch
+    push_env = os.environ.copy()
+    push_env["GIT_TERMINAL_PROMPT"] = "0"
+    if askpass_path:
+        push_env["GIT_ASKPASS"] = askpass_path
+        push_env["GIT_ASKPASS_REQUIRE"] = "force"
+    run_command(f"git push -u origin {branch_name}", cwd=cwd, env=push_env, sensitive=bool(askpass_path))
+
+    # Create DRAFT PR immediately
+    pr_title = f"Fix: {plan['title']}"
+    pr_body = f"🚧 Draft PR - Automated fix in progress...\\n\\n{plan['description']}\\n\\nThis PR will be marked as ready once the automated changes are complete."
+    pr_url = ""
+
+    # Try to create draft PR (with fallback strategies)
+    try:
+        pr_url = run_capture(
+            f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
+            f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+            f"--head {json.dumps(branch_name)} --draft --json url -q .url",
+            cwd=cwd,
+        ).strip()
+        log(f"Draft PR created via --json: {pr_url}")
+    except Exception as e:
+        # Fallback: try without --json flag
+        log(f"--json flag failed, trying without: {e}")
+        proc_result = subprocess.run(
+            f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
+            f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+            f"--head {json.dumps(branch_name)} --draft",
+            shell=True,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        out = (proc_result.stdout or "").strip()
+        if out:
+            log(out)
+
+        # Try to extract URL from output or "already exists" message
+        match = re.search(r"https://github\\.com/[\\w\\-_]+/[\\w\\-_]+/pull/\\d+", out)
+        if match:
+            pr_url = match.group(0)
+            log(f"Draft PR URL extracted: {pr_url}")
+        else:
+            log("Could not extract draft PR URL, will retry after coding")
+
+    if pr_url:
+        log(f"__SOULCASTER_PR_URL__={pr_url}")
+
+    # 7. Run Kilocode to make the actual changes
     prompt = f"Executing Coding Plan: {plan['title']}\n\n"
     prompt += f"Description: {plan['description']}\n\n"
     prompt += f"Tasks:\n"
@@ -384,68 +438,160 @@ def main():
     if exit_code != 0:
         raise subprocess.CalledProcessError(exit_code, "kilocode --auto")
 
-    # 7. Push and PR
-    # Clean up bytecode artifacts before committing.
+    # 8. Commit Kilocode changes and push
+    log("Committing changes made by Kilocode...")
     run_command("find . -type d -name '__pycache__' -prune -exec rm -rf {} + || true", cwd=cwd)
     run_command("find . -type f -name '*.pyc' -delete || true", cwd=cwd)
 
     run_command(f"git add .", cwd=cwd)
+
     # Check if anything to commit
     status = run_capture("git status --porcelain", cwd=cwd)
     if not status:
-        log("No changes detected; skipping commit/push/PR.")
-        return
+        log("No changes detected from Kilocode; skipping commit.")
+    else:
+        commit_msg = f"Fix: {plan['title']}"
+        run_command(f"git commit -m {json.dumps(commit_msg)}", cwd=cwd)
 
-    commit_msg = f"Fix: {plan['title']}"
-    run_command(f"git commit -m {json.dumps(commit_msg)}", cwd=cwd)
+        # Push changes
+        run_command(f"git push", cwd=cwd, env=push_env, sensitive=bool(askpass_path))
+        log("Changes pushed successfully")
 
-    # Ensure push doesn't block on a prompt if auth isn't configured.
-    push_env = os.environ.copy()
-    push_env["GIT_TERMINAL_PROMPT"] = "0"
-    if askpass_path:
-        push_env["GIT_ASKPASS"] = askpass_path
-        push_env["GIT_ASKPASS_REQUIRE"] = "force"
-    run_command(f"git push -u origin {branch_name}", cwd=cwd, env=push_env, sensitive=bool(askpass_path))
+    # 9. If draft PR wasn't created, try to find or create it now
+    if not pr_url:
+        log("Draft PR was not created earlier, trying to find or create PR now...")
 
-    pr_title = f"Fix: {plan['title']}"
-    pr_body = f"Automated fix based on plan.\n\n{plan['description']}"
-    pr_url = ""
-    # Prefer structured output if supported by the installed gh version.
-    try:
-        pr_url = run_capture(
-            f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-            f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
-            f"--head {json.dumps(branch_name)} --json url -q .url",
-            cwd=cwd,
-        ).strip()
-    except Exception:
-        # Fallback 1: create PR without --json and scrape URL from output.
+        # First, try to find existing PR by branch
         try:
-            out = run_capture(
-                f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-                f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
-                f"--head {json.dumps(branch_name)}",
+            pr_url = run_capture(
+                f"gh pr list --repo {json.dumps(f'{owner}/{repo_name}')} "
+                f"--head {json.dumps(branch_name)} --json url -q '.[0].url'",
                 cwd=cwd,
-            )
-            match = re.search(r"https://github\\.com/[^\\s]+/pull/\\d+", out)
-            if match:
-                pr_url = match.group(0)
+            ).strip()
+            if pr_url:
+                log(f"Found existing PR: {pr_url}")
         except Exception:
-            # Fallback 2: if PR already exists or create failed, try to find it by head branch.
+            pass
+
+        # If no existing PR found, try to create one
+        if not pr_url:
+            log("No existing PR found, creating final PR...")
+            pr_title = f"Fix: {plan['title']}"
+            pr_body = f"Automated fix based on plan.\\n\\n{plan['description']}"
+
+            # Try to create final PR
             try:
                 pr_url = run_capture(
-                    f"gh pr list --repo {json.dumps(f'{owner}/{repo_name}')} "
-                    f"--head {json.dumps(branch_name)} --json url -q '.[0].url'",
+                    f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
+                    f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+                    f"--head {json.dumps(branch_name)} --json url -q .url",
                     cwd=cwd,
                 ).strip()
             except Exception:
-                pr_url = ""
+                # Fallback: create PR without --json and scrape URL from output
+                proc_result = subprocess.run(
+                    f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
+                    f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+                    f"--head {json.dumps(branch_name)}",
+                    shell=True,
+                    cwd=cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                out = (proc_result.stdout or "").strip()
+                if out:
+                    log(out)
+                # Try to find PR URL from output or "already exists" message
+                match = re.search(r"https://github\\.com/[\\w\\-_]+/[\\w\\-_]+/pull/\\d+", out)
+                if match:
+                    pr_url = match.group(0)
+                    log(f"PR URL extracted: {pr_url}")
 
+    # 10. If we have a PR URL (from draft or fallback), generate description and mark ready
     if pr_url:
         log(f"__SOULCASTER_PR_URL__={pr_url}")
-        log("PR Created Successfully.")
+        log("Generating final PR description with LLM...")
+
+        # Get diff for LLM
+        diff_output = run_capture("git diff HEAD~1", cwd=cwd)
+
+        # Generate PR description using Gemini
+        gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        if gemini_api_key:
+            try:
+                # Install google-generativeai if not available
+                try:
+                    import google.generativeai as genai
+                except ImportError:
+                    log("Installing google-generativeai package...")
+                    run_command("pip install -q google-generativeai")
+                    import google.generativeai as genai
+
+                genai.configure(api_key=gemini_api_key)
+                model = genai.GenerativeModel('gemini-2.5-flash')
+
+                prompt = (
+                    "You are writing a pull request description for a code change.\\n\\n"
+                    f"Plan Title: {plan['title']}\\n"
+                    f"Plan Description: {plan['description']}\\n\\n"
+                    f"Git Diff:\\n{diff_output[:8000]}\\n\\n"
+                    "Write a clear and concise PR description with the following sections:\\n"
+                    "1. Summary: What problem does this fix and how?\\n"
+                    "2. Changes Made: What files/code were modified?\\n"
+                    "3. Test Plan: How should this be tested?\\n\\n"
+                    "Keep it professional and concise. Use markdown formatting."
+                )
+
+                response = model.generate_content(prompt)
+                generated_description = response.text.strip()
+
+                final_pr_body = generated_description + "\\n\\n---\\n🤖 Generated with Soulcaster Agent\\n"
+                log("PR description generated by LLM")
+            except Exception as e:
+                log(f"Failed to generate PR description with LLM: {e}")
+                log("Using fallback template...")
+                final_pr_body = (
+                    "## Summary\\n\\n" + plan['description'] +
+                    "\\n\\n## Changes Made\\n\\n"
+                    "Automated fix implemented based on the coding plan.\\n\\n"
+                    "## Test Plan\\n\\n"
+                    "Please review the changes and test manually.\\n\\n"
+                    "---\\n🤖 Generated with Soulcaster Agent\\n"
+                )
+        else:
+            log("GEMINI_API_KEY not available, using template...")
+            final_pr_body = (
+                "## Summary\\n\\n" + plan['description'] +
+                "\\n\\n## Changes Made\\n\\n"
+                "Automated fix implemented based on the coding plan.\\n\\n"
+                "## Test Plan\\n\\n"
+                "Please review the changes and test manually.\\n\\n"
+                "---\\n🤖 Generated with Soulcaster Agent\\n"
+            )
+
+        # Update PR description
+        log("Updating PR description...")
+        try:
+            run_command(
+                f"gh pr edit {json.dumps(pr_url)} --body {json.dumps(final_pr_body)}",
+                cwd=cwd
+            )
+            log("PR description updated!")
+        except Exception as e:
+            log(f"Could not update PR description: {e}")
+
+        # Mark PR as ready for review
+        log("Marking PR as ready for review...")
+        try:
+            run_command(f"gh pr ready {json.dumps(pr_url)}", cwd=cwd)
+            log("PR marked as ready!")
+        except Exception as e:
+            log(f"Could not mark PR as ready (may already be ready): {e}")
+
+        log("PR process completed successfully!")
     else:
-        log("PR creation did not return a URL; a PR may still be creatable via the pushed branch.")
+        log("Could not create or find PR. Check if branch was pushed successfully.")
 
 if __name__ == "__main__":
     main()

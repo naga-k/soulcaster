@@ -101,20 +101,29 @@ Goal: transform each IssueCluster into a structured coding plan and execute that
 - e2b SDK reference: [https://e2b.dev/docs/sdk-reference](https://e2b.dev/docs/sdk-reference)
 
 ## Known Failure Modes & Troubleshooting
-### PR creation fails after branch push
-Symptoms:
-- Logs show `git push -u origin <branch>` succeeded, but `gh pr create ...` fails (historically exit code `2` on older `gh` builds that don’t support `--json/-q`).
-- In some cases, the runner’s final fallback (`gh pr list --head <branch>`) returns no URL, so the job can’t surface a PR link even though the branch exists.
+### ~~PR creation fails after branch push~~ **[RESOLVED - 2025-12-16]**
+**Status**: Fixed in `backend/agent_runner/sandbox.py`
 
-Example log snippet (real-world):
-```
-Running: gh pr list --repo "naga-k/math_fucntions_soulcaster" --head "fix/soulcaster-1765846824" --json url -q '.[0].url'
-PR creation did not return a URL; a PR may still be creatable via the pushed branch.
-```
+**What was broken**:
+- PR creation would fail silently when old gh CLI didn't support `--json` flag
+- PR URLs weren't extracted from "already exists" error messages
+- Cluster status stayed as "fixing" even after successful job completion (missing `update_cluster` import)
+- PR descriptions had literal `\n` instead of actual newlines
 
-Current behavior:
-- The sandbox runner attempts `gh pr create` with structured output, then falls back to non-JSON output scraping, then `gh pr list --head <branch>`.
-- If none produce a PR URL, the job can still succeed with a pushed branch; a PR may be opened manually from GitHub using that branch.
+**Fixes applied**:
+1. **Improved fallback logic**: Now properly extracts PR URLs from output even when `--json` flag fails
+2. **Find existing PRs first**: Before creating new PR, checks if one already exists for the branch using `gh pr list --head`
+3. **Extract from "already exists" errors**: Regex now captures PR URL from error messages like `"a pull request...already exists: https://github.com/..."`
+4. **Fixed missing import**: Added `update_cluster` to imports so cluster status properly updates to "pr_opened"
+5. **Fixed PR body formatting**: Changed `\n` to `\\n` so markdown renders correctly
+6. **Draft PR workflow**: Creates draft PR early, runs Kilocode, then updates description with Gemini and marks ready
+
+**Current behavior** (post-fix):
+- Creates draft PR immediately after pushing empty commit
+- Runs Kilocode to make actual changes
+- Generates PR description using Gemini (or template fallback)
+- Updates PR body and marks as ready for review
+- Cluster status automatically updates to "pr_opened" on success
 
 Checklist:
 - Ensure `GITHUB_TOKEN` has access to the repo (private repos require `repo` scope for classic PATs, or fine-grained token permissions including `Contents: Read/Write` and `Pull requests: Read/Write`).

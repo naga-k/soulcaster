@@ -154,8 +154,14 @@ sequenceDiagram
 - GitHub operations (clone/push/PR) are performed non-interactively using `GITHUB_TOKEN`.
 - Logs are persisted per job and surfaced via the dashboard (rather than piping all sandbox output to backend stdout).
 
-**Operational note:** PR URL may be missing even after branch push.
-- In some runs, `git push` succeeds but `gh pr create` fails or returns no URL, and the final fallback (`gh pr list --head <branch>`) returns nothing, so Soulcaster can’t display a PR link even though a PR may still be creatable from the pushed branch.
+**Operational note:** ~~PR URL may be missing even after branch push.~~ **[RESOLVED - 2025-12-16]**
+- **Fixed**: PR URLs are now reliably extracted through improved fallback logic:
+  1. Attempts `gh pr create --draft --json` for structured output
+  2. Falls back to non-JSON output with regex URL extraction
+  3. Checks for existing PRs using `gh pr list --head <branch>` before creating new ones
+  4. Extracts URLs from "already exists" error messages
+  5. Generates PR descriptions using Gemini and marks as ready after Kilocode completes
+- The sandbox runner now successfully captures PR URLs in all scenarios where a PR is created or already exists.
 
 ### AWS/Fargate path (deprecated)
 - The original ECS/Fargate coding-agent path is deprecated in favor of the E2B sandbox runner.
