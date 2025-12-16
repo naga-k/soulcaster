@@ -735,7 +735,8 @@ class SandboxKilocodeRunner(AgentRunner):
                  # Capture PR URL signal emitted by the agent script so we can persist it.
                  if "__SOULCASTER_PR_URL__=" in text:
                      try:
-                         pr_url = text.split("__SOULCASTER_PR_URL__=", 1)[1].strip()
+                         # Extract only the URL on the same line, ignore subsequent log messages
+                         pr_url = text.split("__SOULCASTER_PR_URL__=", 1)[1].split('\n')[0].strip()
                          if pr_url:
                              await asyncio.to_thread(update_job, job.id, pr_url=pr_url, updated_at=datetime.now(timezone.utc))
                              await asyncio.to_thread(
