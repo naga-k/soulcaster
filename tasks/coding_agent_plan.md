@@ -19,7 +19,8 @@ Goal: transform each IssueCluster into a structured coding plan and execute that
 - Backend exposes `GET/POST /clusters/{id}/plan` and stores `CodingPlan` records.
 - `POST /clusters/{id}/start_fix` creates an `AgentJob`, clears cluster errors, infers `github_repo_url` from feedback items, and dispatches the configured runner.
 - `SandboxKilocodeRunner` persists logs per job (Redis-backed where available) and the dashboard tails them via `GET /jobs/{id}/logs`.
-- GitHub auth is standardized on `GITHUB_TOKEN` (no `GH_TOKEN`), and the runner uses non-interactive git auth (no prompts).
+- GitHub auth uses OAuth (required): users must sign in with GitHub. Their token is passed from dashboard → backend → E2B sandbox. PRs are created from the user's account (e.g., @username). Runner uses non-interactive git auth (no prompts).
+- Future: GitHub App support planned for bot-based PRs (soulcaster[bot]).
 
 ## Target Architecture Components
 1. **Plan generator** – Backend module that reads cluster + feedback items and stores a `CodingPlan` (Redis) with timestamps + metadata.
@@ -126,6 +127,8 @@ Goal: transform each IssueCluster into a structured coding plan and execute that
 - Cluster status automatically updates to "pr_opened" on success
 
 Checklist:
-- Ensure `GITHUB_TOKEN` has access to the repo (private repos require `repo` scope for classic PATs, or fine-grained token permissions including `Contents: Read/Write` and `Pull requests: Read/Write`).
-- Ensure any GitHub org SSO requirement is authorized for the token.
+- Ensure user is signed in with GitHub OAuth (required for all environments - local and production).
+- User's GitHub token must have `repo` and `read:user` scopes (automatically granted during OAuth flow).
+- For private repos or org repos: ensure user has write access to the repository.
+- If org has SSO enabled: user must authorize the OAuth app for that organization in their GitHub settings.
 - Ensure the repo URL is correct (the runner infers `github_repo_url` from feedback items; stale fallback URLs should not persist across runs).

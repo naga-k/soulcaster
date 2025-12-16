@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 from uuid import UUID
 
 from models import AgentJob, CodingPlan, IssueCluster
@@ -11,10 +11,22 @@ class AgentRunner(ABC):
     """
 
     @abstractmethod
-    async def start(self, job: AgentJob, plan: CodingPlan, cluster: IssueCluster) -> None:
+    async def start(
+        self,
+        job: AgentJob,
+        plan: CodingPlan,
+        cluster: IssueCluster,
+        github_token: Optional[str] = None
+    ) -> None:
         """
         Start the agent execution for the given job.
         Should handle setup, execution, logging, and completion.
+
+        Args:
+            job: The agent job to execute
+            plan: The coding plan to implement
+            cluster: The issue cluster being fixed
+            github_token: Optional per-user GitHub token. Falls back to GITHUB_TOKEN env var if not provided.
         """
         pass
 

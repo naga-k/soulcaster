@@ -1128,12 +1128,15 @@ def generate_cluster_plan(cluster_id: str, project_id: Optional[str] = Query(Non
 
 @app.post("/clusters/{cluster_id}/start_fix")
 async def start_cluster_fix(
-    cluster_id: str, 
+    cluster_id: str,
     project_id: Optional[str] = Query(None),
-    background_tasks: BackgroundTasks = None # type: ignore (FastAPI injection)
+    background_tasks: BackgroundTasks = None, # type: ignore (FastAPI injection)
+    x_github_token: Optional[str] = Header(None, alias="X-GitHub-Token")
 ):
     """
     Trigger the coding agent to fix the issues in the cluster.
+    Accepts optional X-GitHub-Token header for per-user GitHub authentication.
+    Falls back to GITHUB_TOKEN environment variable if header is not provided.
     """
     from fastapi import BackgroundTasks
 
@@ -1218,7 +1221,7 @@ async def start_cluster_fix(
     )
 
     async def _run_agent():
-        await runner.start(job, plan, cluster)
+        await runner.start(job, plan, cluster, github_token=x_github_token)
 
     # In unit tests, avoid launching real external runners (E2B/AWS) unless explicitly enabled.
     # Starlette's TestClient executes BackgroundTasks after the response, which can flip

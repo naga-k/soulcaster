@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from models import AgentJob, CodingPlan, IssueCluster
 from agent_runner import AgentRunner, register_runner
 from store import update_job
@@ -7,7 +8,13 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class AwsKilocodeRunner(AgentRunner):
-    async def start(self, job: AgentJob, plan: CodingPlan, cluster: IssueCluster) -> None:
+    async def start(
+        self,
+        job: AgentJob,
+        plan: CodingPlan,
+        cluster: IssueCluster,
+        github_token: Optional[str] = None
+    ) -> None:
         logger.info(f"Starting AWS job {job.id} for plan {plan.id}")
         
         # Check if boto3 is available

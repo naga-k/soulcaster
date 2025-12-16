@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from typing import Optional
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -388,11 +389,16 @@ def main():
     pr_body = f"🚧 Draft PR - Automated fix in progress...\\n\\n{plan['description']}\\n\\nThis PR will be marked as ready once the automated changes are complete."
     pr_url = ""
 
+    # Write draft PR body to temp file to avoid shell escaping issues
+    draft_pr_body_file = "/tmp/draft_pr_body.txt"
+    with open(draft_pr_body_file, "w") as f:
+        f.write(pr_body)
+
     # Try to create draft PR (with fallback strategies)
     try:
         pr_url = run_capture(
             f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-            f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+            f"--title {json.dumps(pr_title)} --body-file {draft_pr_body_file} "
             f"--head {json.dumps(branch_name)} --draft --json url -q .url",
             cwd=cwd,
         ).strip()
@@ -402,7 +408,7 @@ def main():
         log(f"--json flag failed, trying without: {e}")
         proc_result = subprocess.run(
             f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-            f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+            f"--title {json.dumps(pr_title)} --body-file {draft_pr_body_file} "
             f"--head {json.dumps(branch_name)} --draft",
             shell=True,
             cwd=cwd,
@@ -479,11 +485,16 @@ def main():
             pr_title = f"Fix: {plan['title']}"
             pr_body = f"Automated fix based on plan.\\n\\n{plan['description']}"
 
-            # Try to create final PR
+            # Write PR body to a temp file to avoid shell escaping issues
+            pr_body_file = "/tmp/pr_body.txt"
+            with open(pr_body_file, "w") as f:
+                f.write(pr_body)
+
+            # Try to create final PR using --body-file to avoid shell escaping issues
             try:
                 pr_url = run_capture(
                     f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-                    f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+                    f"--title {json.dumps(pr_title)} --body-file {pr_body_file} "
                     f"--head {json.dumps(branch_name)} --json url -q .url",
                     cwd=cwd,
                 ).strip()
@@ -491,7 +502,7 @@ def main():
                 # Fallback: create PR without --json and scrape URL from output
                 proc_result = subprocess.run(
                     f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
-                    f"--title {json.dumps(pr_title)} --body {json.dumps(pr_body)} "
+                    f"--title {json.dumps(pr_title)} --body-file {pr_body_file} "
                     f"--head {json.dumps(branch_name)}",
                     shell=True,
                     cwd=cwd,
@@ -573,8 +584,13 @@ def main():
         # Update PR description
         log("Updating PR description...")
         try:
+            # Write final PR body to temp file to avoid shell escaping issues
+            final_pr_body_file = "/tmp/final_pr_body.txt"
+            with open(final_pr_body_file, "w") as f:
+                f.write(final_pr_body)
+
             run_command(
-                f"gh pr edit {json.dumps(pr_url)} --body {json.dumps(final_pr_body)}",
+                f"gh pr edit {json.dumps(pr_url)} --body-file {final_pr_body_file}",
                 cwd=cwd
             )
             log("PR description updated!")
@@ -598,7 +614,13 @@ if __name__ == "__main__":
 """
 
 class SandboxKilocodeRunner(AgentRunner):
-    async def start(self, job: AgentJob, plan: CodingPlan, cluster: IssueCluster) -> None:
+    async def start(
+        self,
+        job: AgentJob,
+        plan: CodingPlan,
+        cluster: IssueCluster,
+        github_token: Optional[str] = None
+    ) -> None:
         if not AsyncSandbox:
             logger.error("e2b SDK not installed. Cannot run SandboxKilocodeRunner.")
             await self._fail_job(job.id, "e2b SDK missing")
@@ -625,6 +647,12 @@ class SandboxKilocodeRunner(AgentRunner):
                  or os.getenv("DEFAULT_GITHUB_REPO_URL")
                  or "https://github.com/naga-k/bad-ux-mart"
              ).strip()
+
+             # Require github_token from user's OAuth (no fallback to env var)
+             if not github_token:
+                  await self._fail_job(job.id, "GitHub authentication required. User must be signed in with GitHub OAuth.")
+                  return
+
              env_vars = {
                  "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
                  "KILO_API_MODEL_ID": os.getenv("KILO_API_MODEL_ID", ""),
@@ -632,10 +660,10 @@ class SandboxKilocodeRunner(AgentRunner):
                  "MINIMAX_API_KEY": os.getenv("MINIMAX_API_KEY", os.getenv("MINIMAX_API_TOKEN", "")),
                  "MINIMAX_BASE_URL": os.getenv("MINIMAX_BASE_URL", ""),
                  "KILOCODE_CONFIG_JSON": os.getenv("KILOCODE_CONFIG_JSON", ""),
-                 "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN", ""),
+                 "GITHUB_TOKEN": github_token,
                  "REPO_URL": repo_url,
              }
-             
+
              if not env_vars["REPO_URL"]:
                   await self._fail_job(job.id, "Missing REPO_URL for sandbox run")
                   return

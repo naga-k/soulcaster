@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireProjectId } from '@/lib/project';
+import { getGitHubToken } from '@/lib/auth';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
@@ -13,10 +14,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const projectId = await requireProjectId(request);
+    const githubToken = await getGitHubToken();
 
     // Validate ID format (UUID or numeric)
     if (!id || !/^[a-zA-Z0-9-]+$/.test(id)) {
       return NextResponse.json({ error: 'Invalid cluster ID' }, { status: 400 });
+    }
+
+    // Check if user has GitHub token
+    if (!githubToken) {
+      return NextResponse.json(
+        { error: 'GitHub authentication required. Please sign in with GitHub to create PRs.' },
+        { status: 401 }
+      );
     }
 
     // Direct proxy to backend
@@ -27,6 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-GitHub-Token': githubToken, // Pass user's token to backend
       },
     });
 
