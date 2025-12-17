@@ -394,15 +394,15 @@ def main():
     with open(draft_pr_body_file, "w") as f:
         f.write(pr_body)
 
-    # Try to create draft PR (with fallback strategies)
+    # Try to create draft PR (gh pr create outputs URL to stdout by default)
     try:
         pr_url = run_capture(
             f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
             f"--title {json.dumps(pr_title)} --body-file {draft_pr_body_file} "
-            f"--head {json.dumps(branch_name)} --draft --json url -q .url",
+            f"--head {json.dumps(branch_name)} --draft",
             cwd=cwd,
         ).strip()
-        log(f"Draft PR created via --json: {pr_url}")
+        log(f"Draft PR created: {pr_url}")
     except Exception as e:
         # Fallback: try without --json flag
         log(f"--json flag failed, trying without: {e}")
@@ -490,12 +490,12 @@ def main():
             with open(pr_body_file, "w") as f:
                 f.write(pr_body)
 
-            # Try to create final PR using --body-file to avoid shell escaping issues
+            # Try to create final PR using --body-file (gh pr create outputs URL to stdout)
             try:
                 pr_url = run_capture(
                     f"gh pr create --repo {json.dumps(f'{owner}/{repo_name}')} "
                     f"--title {json.dumps(pr_title)} --body-file {pr_body_file} "
-                    f"--head {json.dumps(branch_name)} --json url -q .url",
+                    f"--head {json.dumps(branch_name)}",
                     cwd=cwd,
                 ).strip()
             except Exception:
