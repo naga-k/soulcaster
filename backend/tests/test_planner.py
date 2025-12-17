@@ -50,7 +50,7 @@ def test_generate_plan_no_api_key():
         assert "no API key" in plan.description 
         assert plan.cluster_id == "c1"
 
-def test_generate_plan_execption_handling():
+def test_generate_plan_exception_handling():
     cluster = IssueCluster(
         id="c1", project_id="p1", title="Bug", summary="Bug summary",
         feedback_ids=[], status="new", created_at=datetime.now(timezone.utc),

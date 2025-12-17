@@ -1467,9 +1467,9 @@ class RedisStore:
         try:
             if ttl_seconds > 0:
                 self.client.expire(key, ttl_seconds)
-        except Exception:
+        except Exception as exc:
             # Best-effort TTL: not all clients/backends support expire the same way.
-            pass
+            logger.debug("Failed to set TTL on %s: %s", key, exc)
 
     def get_job_logs(self, job_id: UUID, cursor: int = 0, limit: int = 200) -> tuple[list[str], int, bool]:
         key = self._job_logs_key(job_id)

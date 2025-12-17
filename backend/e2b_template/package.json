@@ -3,11 +3,11 @@
     "version": "1.0.0",
     "private": true,
     "scripts": {
-        "e2b:build:dev": "cd kilo-code-template-0-1 && npx tsx build.dev.ts",
-        "e2b:build:prod": "cd kilo-code-template-0-1 && npx tsx build.prod.ts"
+        "e2b:build:dev": "cd kilo-sandbox-v-0-1 && npx tsx build.dev.ts",
+        "e2b:build:prod": "cd kilo-sandbox-v-0-1 && npx tsx build.prod.ts"
     },
     "dependencies": {
-        "e2b": "^0.1.0",
+        "e2b": "^2.8.4",
         "dotenv": "^16.4.5"
     },
     "devDependencies": {

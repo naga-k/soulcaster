@@ -56,7 +56,7 @@ export default function ClusterDetailPage() {
     if (!selectedJobId || !isTailingLogs) return;
     const interval = setInterval(() => fetchJobLogs(selectedJobId, { append: true }), 2000);
     return () => clearInterval(interval);
-  }, [selectedJobId, isTailingLogs, logCursor]);
+  }, [selectedJobId, isTailingLogs, logCursor, fixJobs]);
 
   const fetchCluster = async () => {
     try {

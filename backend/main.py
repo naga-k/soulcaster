@@ -1082,8 +1082,10 @@ def get_cluster_plan(cluster_id: str, project_id: Optional[str] = Query(None)):
     """
     Retrieve the latest generated coding plan for a cluster.
     """
+    pid = _require_project_id(project_id)
+
     # 1. Check if cluster exists (and matches project_id if provided)
-    cluster = get_cluster(project_id, cluster_id)
+    cluster = get_cluster(pid, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
@@ -1102,8 +1104,10 @@ def generate_cluster_plan(cluster_id: str, project_id: Optional[str] = Query(Non
     """
     Generate or regenerate a coding plan for a cluster using the LLM.
     """
+    pid = _require_project_id(project_id)
+
     # 1. Valdiate cluster
-    cluster = get_cluster(project_id, cluster_id)
+    cluster = get_cluster(pid, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
@@ -1235,7 +1239,9 @@ async def start_cluster_fix(
             # Fallback for sync contexts
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(_run_agent())
+                task = loop.create_task(_run_agent())
+                _BACKGROUND_TASKS.add(task)
+                task.add_done_callback(_BACKGROUND_TASKS.discard)
             except RuntimeError:
                 # No loop (e.g. sync test client), run inline?
                 # Running inline might deadlock if it uses async.

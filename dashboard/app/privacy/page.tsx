@@ -6,7 +6,7 @@ export default function PrivacyPage() {
       <div className="max-w-3xl mx-auto">
         <div className="bg-white shadow rounded-lg p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-6">Privacy Policy</h1>
-          <p className="text-sm text-gray-500 mb-8">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="text-sm text-gray-500 mb-8">Last updated: December 15, 2025</p>
 
           <div className="prose prose-blue max-w-none">
             <section className="mb-8">
@@ -136,7 +136,7 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   <strong>E2B:</strong> For secure sandbox execution of code generation
-                  (<a href="https://e2b.dev/docs/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Privacy Policy</a>)
+                  (<a href="https://e2b.dev/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Privacy Policy</a>)
                 </li>
                 <li>
                   <strong>Google Gemini:</strong> For LLM-powered embeddings and code generation
@@ -236,12 +236,12 @@ export default function PrivacyPage() {
                 <br />
                 <strong>GitHub:</strong>{' '}
                 <a
-                  href="https://github.com/altock/soulcaster/issues"
+                  href="https://github.com/naga-k/soulcaster/issues"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:underline"
                 >
-                  github.com/altock/soulcaster/issues
+                  github.com/naga-k/soulcaster/issues
                 </a>
               </p>
             </section>

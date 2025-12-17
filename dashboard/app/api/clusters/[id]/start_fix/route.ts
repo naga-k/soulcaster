@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Direct proxy to backend
     // Backend expects optional project_id query param
-    const backendUrl = `${BACKEND_URL}/clusters/${encodeURIComponent(id)}/start_fix?project_id=${projectId}`;
+    const backendUrl = `${BACKEND_URL}/clusters/${encodeURIComponent(id)}/start_fix?project_id=${encodeURIComponent(projectId)}`;
 
     const response = await fetch(backendUrl, {
       method: 'POST',

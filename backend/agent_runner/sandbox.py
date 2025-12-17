@@ -122,7 +122,7 @@ def configure_kilocode():
             "id": "default",
             "provider": "gemini",
             "geminiApiKey": gemini_key,
-            "apiModelId": api_model_id or "gemini-3-pro",
+            "apiModelId": api_model_id or "gemini-3-pro-preview",
             "enableUrlContext": False,
             "enableGrounding": False,
         }
@@ -821,22 +821,23 @@ class SandboxKilocodeRunner(AgentRunner):
             await self._fail_job(job.id, str(e))
         finally:
             if sandbox is not None:
-                if os.getenv("E2B_KEEP_SANDBOX", "").lower() in {"1", "true", "yes"}:
+                should_keep = os.getenv("E2B_KEEP_SANDBOX", "").lower() in {"1", "true", "yes"}
+                if should_keep:
                     logger.info("E2B_KEEP_SANDBOX enabled; leaving sandbox %s running", sandbox.sandbox_id)
-                    return
-                try:
-                    killed = sandbox.kill()
-                    if asyncio.iscoroutine(killed):
-                        killed = await killed
-                    logger.info("Sandbox %s killed=%s", sandbox.sandbox_id, killed)
-                except Exception as kill_err:
-                    # E2B may already have terminated the sandbox (e.g. TTL or upstream cleanup),
-                    # which can surface as a 404 on delete. Treat that as non-fatal cleanup.
-                    msg = str(kill_err)
-                    if "404" in msg and "Not Found" in msg:
-                        logger.info("Sandbox %s already gone (404 on kill)", getattr(sandbox, "sandbox_id", "?"))
-                    else:
-                        logger.warning("Failed to kill sandbox %s: %s", getattr(sandbox, "sandbox_id", "?"), kill_err)
+                else:
+                    try:
+                        killed = sandbox.kill()
+                        if asyncio.iscoroutine(killed):
+                            killed = await killed
+                        logger.info("Sandbox %s killed=%s", sandbox.sandbox_id, killed)
+                    except Exception as kill_err:
+                        # E2B may already have terminated the sandbox (e.g. TTL or upstream cleanup),
+                        # which can surface as a 404 on delete. Treat that as non-fatal cleanup.
+                        msg = str(kill_err)
+                        if "404" in msg and "Not Found" in msg:
+                            logger.info("Sandbox %s already gone (404 on kill)", getattr(sandbox, "sandbox_id", "?"))
+                        else:
+                            logger.warning("Failed to kill sandbox %s: %s", getattr(sandbox, "sandbox_id", "?"), kill_err)
 
     async def _log(self, job_id: UUID, message: str):
         # Persist to job log stream/list and optionally mirror to console.
@@ -847,7 +848,6 @@ class SandboxKilocodeRunner(AgentRunner):
         await asyncio.to_thread(append_job_log, job_id, line)
 
     async def _fail_job(self, job_id: UUID, error: str):
-        from store import get_job, update_job, update_cluster
         job = await asyncio.to_thread(get_job, job_id)
         current_logs = job.logs or "" if job else ""
         await asyncio.to_thread(

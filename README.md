@@ -158,8 +158,6 @@ See `.env.example` for all available environment variables. Key configuration in
 - `REDDIT_SORTS` - Listing sorts to pull (`new`, `hot`, `top`) - defaults to `"new"`
 - `REDDIT_POLL_INTERVAL_SECONDS` - How often to poll Reddit - defaults to `300`
 - `REDIS_URL` or `UPSTASH_REDIS_URL` - Alternative Redis connection string (if not using REST API)
-- `E2B_API_KEY` - Required for the `sandbox_kilo` runner (E2B sandbox provisioning)
-- `KILOCODE_TEMPLATE_NAME` - E2B template name for the Kilo sandbox (e.g. `kilo-sandbox-v-0-1-dev`)
 
 **Dashboard**:
 - `GITHUB_OWNER` - Default GitHub repository owner (for new issues)
