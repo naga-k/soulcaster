@@ -668,7 +668,7 @@ Return ONLY valid JSON.
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: [
         {
           role: 'user',
