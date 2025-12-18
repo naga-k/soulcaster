@@ -153,13 +153,14 @@ export default function RequestIntegrationDialog({
           <div
             role="dialog"
             aria-modal="true"
+            aria-labelledby="request-dialog-title"
             className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-gradient-to-br from-black/80 via-black/70 to-black/80 p-6 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-md"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent rounded-2xl pointer-events-none" />
 
             <div className="relative z-10 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-base font-semibold text-white">Request a new integration/source</h3>
+                <h3 id="request-dialog-title" className="text-base font-semibold text-white">Request a new integration/source</h3>
                 <p className="mt-1 text-sm text-slate-400">
                   We’ll use this to prioritize what to build next. You can copy the request or email it to{' '}
                   <span className="text-slate-200">{resolvedSupportEmail}</span>.

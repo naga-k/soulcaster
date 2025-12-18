@@ -70,10 +70,10 @@ def posthog_event_to_feedback_item(event: dict, project_id: str) -> FeedbackItem
 
 
 def fetch_posthog_events(
-    api_key: str,
-    posthog_project_id: str,
-    event_types: list[str],
-    since: Optional[str] = None,
+    _api_key: str,
+    _posthog_project_id: str,
+    _event_types: list[str],
+    _since: Optional[str] = None,
 ) -> list[dict]:
     """
     Fetch events from PostHog API.

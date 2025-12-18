@@ -213,14 +213,14 @@ def should_ingest_event(
     if allowed_environments:
         event_env = get_environment_from_payload(payload)
         if event_env not in allowed_environments:
-            logger.info(f"Filtering out Sentry event from environment: {event_env}")
+            logger.debug(f"Filtering out Sentry event from environment: {event_env}")
             return False
 
     # Check level filter
     if allowed_levels:
         event_level = get_level_from_payload(payload)
         if event_level not in allowed_levels:
-            logger.info(f"Filtering out Sentry event with level: {event_level}")
+            logger.debug(f"Filtering out Sentry event with level: {event_level}")
             return False
 
     return True

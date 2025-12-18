@@ -9,9 +9,9 @@ from store import (
     clear_clusters,
     get_all_feedback_items,
     get_feedback_by_external_id,
+    clear_config,
 )
 from splunk_client import set_splunk_webhook_token, set_splunk_allowed_searches
-from store import _STORE
 
 client = TestClient(app)
 
@@ -20,10 +20,7 @@ def setup_function():
     """Reset test data before each test."""
     clear_feedback_items()
     clear_clusters()
-    # Clear Splunk config to ensure test isolation
-    pid = "22222222-2222-2222-2222-222222222222"
-    _STORE.set(f"config:splunk:{pid}:webhook_token", None)
-    _STORE.set(f"config:splunk:{pid}:searches", None)
+    clear_config()
 
 
 def test_splunk_webhook_creates_feedback_item(project_context):

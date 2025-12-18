@@ -572,14 +572,22 @@ class InMemoryStore:
 
     def clear_config(self):
         """
-        Remove all stored Reddit subreddit configurations for all projects.
+        Remove all stored integration configuration for all projects.
 
-        This clears any per-project subreddit lists so subsequent lookups return no configuration.
+        This clears any per-project subreddit lists and integration settings so subsequent lookups return no configuration.
         """
         self.reddit_subreddits = {}
         # Also clear Sentry config
         if hasattr(self, "sentry_config"):
             self.sentry_config = {}
+        if hasattr(self, "splunk_config"):
+            self.splunk_config = {}
+        if hasattr(self, "datadog_config"):
+            self.datadog_config = {}
+        if hasattr(self, "posthog_config"):
+            self.posthog_config = {}
+        self.datadog_webhook_secrets = {}
+        self.datadog_monitors = {}
 
     # Config (Sentry)
     def set_sentry_config(self, project_id: ProjectId, key: str, value: Any) -> None:
@@ -1748,14 +1756,17 @@ class RedisStore:
     def clear_config(self):
         # Remove all subreddit config entries across projects
         """
-        Remove all per-project Reddit subreddit configuration entries from the store.
+        Remove all per-project integration configuration entries from the store.
 
-        This deletes every key matching the `config:reddit:subreddits:*` pattern so no project-specific subreddit lists remain.
+        This deletes every key matching the integration config patterns so no project-specific configuration entries remain.
         """
         keys = list(self._scan_iter("config:reddit:subreddits:*"))
         # Also clear Sentry config
         sentry_keys = list(self._scan_iter("config:sentry:*"))
-        all_keys = keys + sentry_keys
+        splunk_keys = list(self._scan_iter("config:splunk:*"))
+        datadog_keys = list(self._scan_iter("config:datadog:*"))
+        posthog_keys = list(self._scan_iter("config:posthog:*"))
+        all_keys = keys + sentry_keys + splunk_keys + datadog_keys + posthog_keys
         if all_keys:
             self._delete(*all_keys)
 
@@ -1801,7 +1812,7 @@ class RedisStore:
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
-            return None
+            return raw
 
     # Config (Splunk)
     @staticmethod

@@ -499,6 +499,8 @@ class FeedbackSource(str, Enum):
     SPLUNK = "splunk"
 ```
 
+**Note**: The actual implementation uses `Literal['reddit', 'sentry', 'manual', 'github', 'splunk', 'posthog', 'datadog']` instead of an enum class. Literals are simpler and integrate better with Pydantic validation, providing the same type safety without the additional complexity of enum classes.
+
 ### Generic Webhook Handler
 
 ```python

@@ -5,13 +5,12 @@ converting them into FeedbackItems for clustering and analysis.
 """
 
 import json
-import time
 from datetime import datetime
 from typing import Optional, List
 from uuid import uuid4
 
 from models import FeedbackItem
-from store import _STORE
+from store import get_splunk_config, set_splunk_config
 
 
 def splunk_alert_to_feedback_item(alert: dict, project_id: str) -> FeedbackItem:
@@ -109,8 +108,7 @@ def get_splunk_webhook_token(project_id: str) -> Optional[str]:
     Returns:
         str or None: The configured token, or None if not set.
     """
-    key = f"config:splunk:{project_id}:webhook_token"
-    return _STORE.get(key)
+    return get_splunk_config(project_id, "webhook_token")
 
 
 def set_splunk_webhook_token(project_id: str, token: str) -> None:
@@ -121,8 +119,7 @@ def set_splunk_webhook_token(project_id: str, token: str) -> None:
         project_id: Project identifier.
         token: Webhook token to store.
     """
-    key = f"config:splunk:{project_id}:webhook_token"
-    _STORE.set(key, token)
+    set_splunk_config(project_id, "webhook_token", token)
 
 
 def get_splunk_allowed_searches(project_id: str) -> Optional[List[str]]:
@@ -135,15 +132,19 @@ def get_splunk_allowed_searches(project_id: str) -> Optional[List[str]]:
     Returns:
         List[str] or None: List of allowed search names, or None if not configured (allow all).
     """
-    key = f"config:splunk:{project_id}:searches"
-    value = _STORE.get(key)
+    value = get_splunk_config(project_id, "searches")
     if value is None:
         return None
-    # Store as JSON array string
-    try:
-        return json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return None
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+    return None
 
 
 def set_splunk_allowed_searches(project_id: str, searches: List[str]) -> None:
@@ -154,8 +155,7 @@ def set_splunk_allowed_searches(project_id: str, searches: List[str]) -> None:
         project_id: Project identifier.
         searches: List of saved search names to allow.
     """
-    key = f"config:splunk:{project_id}:searches"
-    _STORE.set(key, json.dumps(searches))
+    set_splunk_config(project_id, "searches", searches)
 
 
 def is_search_allowed(search_name: str, project_id: str) -> bool:

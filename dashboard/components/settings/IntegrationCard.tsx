@@ -34,8 +34,19 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
     config.fields.forEach((field) => {
-      if (field.type === 'checkbox' || field.type === 'multiselect') {
+      if (field.type === 'checkbox') {
         initial[field.id] = field.defaultValue || [];
+      } else if (field.type === 'multiselect') {
+        if (Array.isArray(field.defaultValue)) {
+          initial[field.id] = field.defaultValue;
+        } else if (typeof field.defaultValue === 'string') {
+          initial[field.id] = field.defaultValue
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+        } else {
+          initial[field.id] = [];
+        }
       } else {
         initial[field.id] = field.defaultValue || '';
       }
@@ -49,6 +60,7 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
+  const [multiSelectInputs, setMultiSelectInputs] = useState<Record<string, string>>({});
 
   // Sync enabled state when config.enabled changes
   useEffect(() => {
@@ -60,9 +72,43 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
       const current = prev[fieldId] || [];
       if (checked) {
         return { ...prev, [fieldId]: [...current, value] };
-      } else {
-        return { ...prev, [fieldId]: current.filter((v: string) => v !== value) };
       }
+      return { ...prev, [fieldId]: current.filter((v: string) => v !== value) };
+    });
+  };
+
+  const addMultiSelectValues = (fieldId: string, rawValue: string) => {
+    const nextValues = rawValue
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!nextValues.length) return;
+
+    setFormData((prev) => {
+      const current = Array.isArray(prev[fieldId]) ? prev[fieldId] : [];
+      const combined = [...current, ...nextValues];
+      const normalized = combined.map((value) => value.trim()).filter(Boolean);
+      if (normalized.includes('*')) {
+        return { ...prev, [fieldId]: ['*'] };
+      }
+      const deduped: string[] = [];
+      const seen = new Set<string>();
+      normalized.forEach((value) => {
+        if (!seen.has(value)) {
+          seen.add(value);
+          deduped.push(value);
+        }
+      });
+      return { ...prev, [fieldId]: deduped };
+    });
+
+    setMultiSelectInputs((prev) => ({ ...prev, [fieldId]: '' }));
+  };
+
+  const removeMultiSelectValue = (fieldId: string, value: string) => {
+    setFormData((prev) => {
+      const current = Array.isArray(prev[fieldId]) ? prev[fieldId] : [];
+      return { ...prev, [fieldId]: current.filter((entry: string) => entry !== value) };
     });
   };
 
@@ -293,14 +339,47 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
             )}
 
             {field.type === 'multiselect' && (
-              <input
-                id={field.id}
-                type="text"
-                value={formData[field.id] || ''}
-                onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                placeholder={field.placeholder}
-                className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all font-mono text-sm"
-              />
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap gap-2">
+                  {(Array.isArray(formData[field.id]) ? formData[field.id] : []).map((value: string) => (
+                    <span
+                      key={`${field.id}-${value}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-xs text-slate-200"
+                    >
+                      <span>{value}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeMultiSelectValue(field.id, value)}
+                        className="text-slate-400 hover:text-white transition-colors"
+                        aria-label={`Remove ${value}`}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    id={field.id}
+                    type="text"
+                    value={multiSelectInputs[field.id] || ''}
+                    onChange={(e) =>
+                      setMultiSelectInputs((prev) => ({ ...prev, [field.id]: e.target.value }))
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ',') {
+                        event.preventDefault();
+                        addMultiSelectValues(field.id, event.currentTarget.value);
+                      }
+                    }}
+                    onBlur={(event) => addMultiSelectValues(field.id, event.currentTarget.value)}
+                    placeholder={
+                      (Array.isArray(formData[field.id]) && formData[field.id].length)
+                        ? ''
+                        : field.placeholder
+                    }
+                    className="min-w-[160px] flex-1 bg-transparent px-2 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none"
+                  />
+                </div>
+              </div>
             )}
 
             {field.helpText && (

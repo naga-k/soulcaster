@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Literal, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Path, Query, Request, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -71,6 +72,14 @@ from store import (
     get_unclustered_feedback,
     add_coding_plan,
     get_coding_plan,
+    get_sentry_config as get_sentry_config_value,
+    set_sentry_config as set_sentry_config_value,
+    get_splunk_config as get_splunk_config_value,
+    set_splunk_config as set_splunk_config_value,
+    get_datadog_config as get_datadog_config_value,
+    set_datadog_config as set_datadog_config_value,
+    get_posthog_config as get_posthog_config_value,
+    set_posthog_config as set_posthog_config_value,
 )
 from planner import generate_plan
 from github_client import fetch_repo_issues, issue_to_feedback_item
@@ -80,8 +89,26 @@ from splunk_client import (
     splunk_alert_to_feedback_item,
     verify_token,
     is_search_allowed,
+    get_splunk_webhook_token,
+    get_splunk_allowed_searches,
+    set_splunk_webhook_token,
+    set_splunk_allowed_searches,
 )
-from posthog_client import posthog_event_to_feedback_item, fetch_posthog_events
+from posthog_client import (
+    posthog_event_to_feedback_item,
+    fetch_posthog_events,
+    get_posthog_event_types,
+    set_posthog_event_types,
+)
+from sentry_client import (
+    verify_sentry_signature,
+    extract_sentry_stacktrace,
+    extract_issue_short_id,
+    extract_event_id,
+    extract_sentry_metadata,
+    should_ingest_event,
+)
+from datadog_client import datadog_event_to_feedback_item, verify_signature
 # Ensure runners are registered
 import agent_runner.sandbox
 import agent_runner.aws
@@ -271,16 +298,6 @@ async def ingest_sentry(
     Raises:
         HTTPException: 401 if signature verification fails, 500 if processing fails.
     """
-    from sentry_client import (
-        verify_sentry_signature,
-        extract_sentry_stacktrace,
-        extract_issue_short_id,
-        extract_event_id,
-        extract_sentry_metadata,
-        should_ingest_event,
-    )
-    from store import get_sentry_config, get_feedback_by_external_id
-
     try:
         pid = _require_project_id(project_id)
 
@@ -289,7 +306,7 @@ async def ingest_sentry(
         payload = json.loads(body.decode('utf-8'))
 
         # Verify signature if configured
-        webhook_secret = get_sentry_config(pid, "webhook_secret")
+        webhook_secret = get_sentry_config_value(pid, "webhook_secret")
         if webhook_secret:
             if not sentry_hook_signature:
                 raise HTTPException(
@@ -304,8 +321,8 @@ async def ingest_sentry(
                 )
 
         # Check environment and level filters
-        allowed_environments = get_sentry_config(pid, "environments")
-        allowed_levels = get_sentry_config(pid, "levels")
+        allowed_environments = get_sentry_config_value(pid, "environments")
+        allowed_levels = get_sentry_config_value(pid, "levels")
 
         if not should_ingest_event(payload, allowed_environments, allowed_levels):
             # Event filtered out - return success but don't create item
@@ -466,8 +483,6 @@ async def ingest_datadog_webhook(
     Raises:
         HTTPException: If signature is invalid (401) or processing fails (500).
     """
-    from datadog_client import datadog_event_to_feedback_item, verify_signature
-
     pid = _require_project_id(project_id)
 
     # 1. Verify signature if secret is configured
@@ -1008,13 +1023,10 @@ def get_splunk_config(project_id: Optional[str] = Query(None)):
             "project_id": str
         }
     """
-    from splunk_client import get_splunk_webhook_token, get_splunk_allowed_searches
-    from store import get_splunk_config
-
     pid = _require_project_id(project_id)
     token = get_splunk_webhook_token(pid)
     searches = get_splunk_allowed_searches(pid)
-    enabled = get_splunk_config(pid, "enabled")
+    enabled = get_splunk_config_value(pid, "enabled")
     if enabled is None:
         enabled = True  # Default to enabled
 
@@ -1038,8 +1050,6 @@ def set_splunk_token(payload: SplunkTokenConfig, project_id: Optional[str] = Que
     Returns:
         dict: {"status": "ok"}
     """
-    from splunk_client import set_splunk_webhook_token
-
     pid = _require_project_id(project_id)
     set_splunk_webhook_token(pid, payload.token)
 
@@ -1058,8 +1068,6 @@ def set_splunk_searches(payload: SplunkSearchesConfig, project_id: Optional[str]
     Returns:
         dict: {"status": "ok"}
     """
-    from splunk_client import set_splunk_allowed_searches
-
     pid = _require_project_id(project_id)
     set_splunk_allowed_searches(pid, payload.searches)
 
@@ -1098,12 +1106,10 @@ def get_datadog_config(project_id: Optional[str] = Query(None)):
             "project_id": str
         }
     """
-    from store import get_datadog_config as get_dd_config
-
     pid = _require_project_id(project_id)
     secret = get_datadog_webhook_secret_for_project(pid)
     monitors = get_datadog_monitors_for_project(pid)
-    enabled = get_dd_config(pid, "enabled")
+    enabled = get_datadog_config_value(pid, "enabled")
     if enabled is None:
         enabled = True  # Default to enabled
 
@@ -1177,12 +1183,9 @@ def get_posthog_config(project_id: Optional[str] = Query(None)):
             "project_id": str
         }
     """
-    from posthog_client import get_posthog_event_types
-    from store import get_posthog_config as get_ph_config
-
     pid = _require_project_id(project_id)
     event_types = get_posthog_event_types(pid)
-    enabled = get_ph_config(pid, "enabled")
+    enabled = get_posthog_config_value(pid, "enabled")
     if enabled is None:
         enabled = True  # Default to enabled
 
@@ -1205,8 +1208,6 @@ def set_posthog_events(payload: PostHogEventTypesConfig, project_id: Optional[st
     Returns:
         dict: {"status": "ok"}
     """
-    from posthog_client import set_posthog_event_types
-
     pid = _require_project_id(project_id)
     set_posthog_event_types(pid, payload.event_types)
 
@@ -1256,13 +1257,11 @@ def get_sentry_config_endpoint(project_id: Optional[str] = Query(None)):
             "project_id": str
         }
     """
-    from store import get_sentry_config
-
     pid = _require_project_id(project_id)
-    secret = get_sentry_config(pid, "webhook_secret")
-    environments = get_sentry_config(pid, "environments")
-    levels = get_sentry_config(pid, "levels")
-    enabled = get_sentry_config(pid, "enabled")
+    secret = get_sentry_config_value(pid, "webhook_secret")
+    environments = get_sentry_config_value(pid, "environments")
+    levels = get_sentry_config_value(pid, "levels")
+    enabled = get_sentry_config_value(pid, "enabled")
     if enabled is None:
         enabled = True  # Default to enabled
 
@@ -1287,10 +1286,8 @@ def set_sentry_secret(payload: SentrySecretConfig, project_id: Optional[str] = Q
     Returns:
         dict: {"status": "ok"}
     """
-    from store import set_sentry_config
-
     pid = _require_project_id(project_id)
-    set_sentry_config(pid, "webhook_secret", payload.secret)
+    set_sentry_config_value(pid, "webhook_secret", payload.secret)
 
     return {"status": "ok"}
 
@@ -1307,10 +1304,8 @@ def set_sentry_environments(payload: SentryEnvironmentsConfig, project_id: Optio
     Returns:
         dict: {"status": "ok"}
     """
-    from store import set_sentry_config
-
     pid = _require_project_id(project_id)
-    set_sentry_config(pid, "environments", payload.environments)
+    set_sentry_config_value(pid, "environments", payload.environments)
 
     return {"status": "ok"}
 
@@ -1327,10 +1322,8 @@ def set_sentry_levels(payload: SentryLevelsConfig, project_id: Optional[str] = Q
     Returns:
         dict: {"status": "ok"}
     """
-    from store import set_sentry_config
-
     pid = _require_project_id(project_id)
-    set_sentry_config(pid, "levels", payload.levels)
+    set_sentry_config_value(pid, "levels", payload.levels)
 
     return {"status": "ok"}
 
@@ -1361,13 +1354,6 @@ def set_integration_enabled(
     Raises:
         HTTPException: 400 if integration is not supported.
     """
-    from store import (
-        set_sentry_config,
-        set_splunk_config,
-        set_datadog_config,
-        set_posthog_config
-    )
-
     pid = _require_project_id(project_id)
 
     # Validate integration name
@@ -1380,13 +1366,13 @@ def set_integration_enabled(
 
     # Route to appropriate config function
     if integration == "splunk":
-        set_splunk_config(pid, "enabled", payload.enabled)
+        set_splunk_config_value(pid, "enabled", payload.enabled)
     elif integration == "datadog":
-        set_datadog_config(pid, "enabled", payload.enabled)
+        set_datadog_config_value(pid, "enabled", payload.enabled)
     elif integration == "posthog":
-        set_posthog_config(pid, "enabled", payload.enabled)
+        set_posthog_config_value(pid, "enabled", payload.enabled)
     elif integration == "sentry":
-        set_sentry_config(pid, "enabled", payload.enabled)
+        set_sentry_config_value(pid, "enabled", payload.enabled)
 
     return {"status": "ok"}
 
@@ -1409,8 +1395,6 @@ async def trigger_poll(project_id: Optional[str] = Query(None)):
     subreddits = get_reddit_subreddits_for_project(pid) or []
     if not subreddits:
         return {"status": "skipped", "message": "No subreddits configured", "project_id": str(pid)}
-    
-    from fastapi.concurrency import run_in_threadpool
     
     # Helper to ingest directly without HTTP request (avoids deadlock)
     def direct_ingest(payload: dict):
@@ -1897,8 +1881,6 @@ async def start_cluster_fix(
     Accepts optional X-GitHub-Token header for per-user GitHub authentication.
     Falls back to GITHUB_TOKEN environment variable if header is not provided.
     """
-    from fastapi import BackgroundTasks
-
     pid = _require_project_id(project_id)
     pid_str = str(pid)
     cluster = get_cluster(pid_str, cluster_id)

@@ -4,11 +4,7 @@ import { useEffect, useState } from 'react';
 import IntegrationCard, { IntegrationConfig } from '@/components/settings/IntegrationCard';
 import SearchInput from '@/components/ui/SearchInput';
 import RequestIntegrationDialog from '@/components/integrations/RequestIntegrationDialog';
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-const DEFAULT_PROJECT_ID = 'default';
-const DEFAULT_PAGE_SIZE = 6;
-const DEFAULT_REQUEST_HREF = 'mailto:support@soulcaster.dev?subject=Integration%20Request';
+import { BACKEND_URL, DEFAULT_PAGE_SIZE, DEFAULT_PROJECT_ID, DEFAULT_REQUEST_HREF } from '@/lib/integrations';
 
 export type IntegrationId = 'splunk' | 'datadog' | 'posthog' | 'sentry';
 
@@ -21,6 +17,7 @@ type IntegrationItem = {
 
 export interface IntegrationsDirectoryProps {
   integrationIds?: IntegrationId[];
+  projectId?: string;
   pageSize?: number;
   requestHref?: string;
   showRequestButton?: boolean;
@@ -34,8 +31,24 @@ function normalizeQuery(value: string) {
   return value.trim().toLowerCase();
 }
 
+function normalizeMultiSelectInput(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    return trimmed
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 export default function IntegrationsDirectory({
   integrationIds,
+  projectId,
   pageSize = DEFAULT_PAGE_SIZE,
   requestHref = DEFAULT_REQUEST_HREF,
   showRequestButton = true,
@@ -46,6 +59,8 @@ export default function IntegrationsDirectory({
 }: IntegrationsDirectoryProps) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const resolvedProjectId = projectId ?? DEFAULT_PROJECT_ID;
 
   // State for integration configs (loaded from backend)
   const [integrationConfigs, setIntegrationConfigs] = useState<Record<IntegrationId, IntegrationConfig>>({
@@ -157,12 +172,13 @@ export default function IntegrationsDirectory({
   // Load initial enabled states from backend
   useEffect(() => {
     const loadIntegrationStates = async () => {
+      setIsLoading(true);
       try {
         const integrations: IntegrationId[] = ['splunk', 'datadog', 'posthog', 'sentry'];
         const results = await Promise.allSettled(
           integrations.map(async (integration) => {
             const res = await fetch(
-              `${BACKEND_URL}/config/${integration}/enabled?project_id=${DEFAULT_PROJECT_ID}`
+              `${BACKEND_URL}/config/${integration}/enabled?project_id=${resolvedProjectId}`
             );
             if (res.ok) {
               const data = await res.json();
@@ -189,18 +205,20 @@ export default function IntegrationsDirectory({
         });
       } catch (error) {
         console.error('Failed to load integration states:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     loadIntegrationStates();
-  }, []);
+  }, [resolvedProjectId]);
 
   // Toggle handlers for each integration
   const handleToggle =
     (integration: IntegrationId) =>
     async (enabled: boolean) => {
       const res = await fetch(
-        `${BACKEND_URL}/config/${integration}/enabled?project_id=${DEFAULT_PROJECT_ID}`,
+        `${BACKEND_URL}/config/${integration}/enabled?project_id=${resolvedProjectId}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -223,7 +241,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID, // TODO: Get from session
+          project_id: resolvedProjectId,
           token: data.webhook_token,
         }),
       });
@@ -240,7 +258,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
+          project_id: resolvedProjectId,
           searches,
         }),
       });
@@ -255,7 +273,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
+          project_id: resolvedProjectId,
           secret: data.webhook_secret,
         }),
       });
@@ -264,12 +282,13 @@ export default function IntegrationsDirectory({
 
     // Save allowed monitors
     if (data.allowed_monitors) {
+      const monitors = normalizeMultiSelectInput(data.allowed_monitors);
       const monitorsRes = await fetch(`${BACKEND_URL}/config/datadog/monitors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
-          monitors: data.allowed_monitors,
+          project_id: resolvedProjectId,
+          monitors,
         }),
       });
       if (!monitorsRes.ok) throw new Error('Failed to save allowed monitors');
@@ -281,7 +300,7 @@ export default function IntegrationsDirectory({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        project_id: DEFAULT_PROJECT_ID,
+        project_id: resolvedProjectId,
         event_types: data.event_types || [],
       }),
     });
@@ -295,7 +314,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
+          project_id: resolvedProjectId,
           secret: data.webhook_secret,
         }),
       });
@@ -308,7 +327,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
+          project_id: resolvedProjectId,
           environments: data.environments,
         }),
       });
@@ -321,7 +340,7 @@ export default function IntegrationsDirectory({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: DEFAULT_PROJECT_ID,
+          project_id: resolvedProjectId,
           levels: data.levels,
         }),
       });
@@ -470,10 +489,17 @@ export default function IntegrationsDirectory({
       )}
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {totalCount === 0 ? (
+        {isLoading ? (
+          <div className="col-span-full rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+            <div className="flex items-center justify-center gap-3">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
+              <p className="text-sm text-slate-300">Loading integrations...</p>
+            </div>
+          </div>
+        ) : totalCount === 0 ? (
           <div className="col-span-full rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
             <p className="text-sm text-slate-300">
-              {showSearch && query.trim() ? `No integrations match “${query}”.` : 'No integrations available.'}
+              {showSearch && query.trim() ? `No integrations match "${query}".` : 'No integrations available.'}
             </p>
           </div>
         ) : (

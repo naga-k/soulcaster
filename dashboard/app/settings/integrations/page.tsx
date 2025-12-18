@@ -1,6 +1,7 @@
 'use client';
 
 import IntegrationsDirectory from '@/components/integrations/IntegrationsDirectory';
+import { ExternalLinkIcon, InfoIcon } from '@/components/ui/Icons';
 
 export default function IntegrationsPage() {
   return (
@@ -41,11 +42,7 @@ export default function IntegrationsPage() {
           <div className="bg-gradient-to-br from-black/40 via-black/20 to-black/40 border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
+                <InfoIcon />
               </div>
               <div>
                 <h4 className="text-lg font-semibold text-white mb-2">Need help configuring webhooks?</h4>
@@ -60,11 +57,7 @@ export default function IntegrationsPage() {
                   className="inline-flex items-center gap-2 text-sm font-medium text-emerald-300 hover:text-emerald-200 transition-colors"
                 >
                   View Documentation
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                    <polyline points="15 3 21 3 21 9" />
-                    <line x1="10" y1="14" x2="21" y2="3" />
-                  </svg>
+                  <ExternalLinkIcon />
                 </a>
               </div>
             </div>
