@@ -1624,7 +1624,9 @@ class RedisStore:
         key = self._cluster_key(project_id, cluster.id)
         self._hset(key, hash_payload)
         
-        self._sadd(self._cluster_all_key(project_id), str(cluster.id))
+        # Use ZSET with created_at timestamp as score for sorted retrieval
+        score = cluster.created_at.timestamp() if cluster.created_at else 0.0
+        self._zadd(self._cluster_all_key(project_id), score, str(cluster.id))
         
         # store cluster items set
         items_key = self._cluster_items_key(project_id, cluster.id)
@@ -1679,8 +1681,8 @@ class RedisStore:
                 parts = key.split(":")
                 if len(parts) >= 2:
                     pid = parts[1]
-                    # Get cluster IDs for this project
-                    cluster_ids = self._smembers(self._cluster_all_key(pid))
+                    # Get cluster IDs for this project (sorted by created_at desc)
+                    cluster_ids = self._zrange(self._cluster_all_key(pid), 0, -1, rev=True)
                     # Load each cluster
                     for cid in cluster_ids:
                         cluster = self.get_cluster(pid, cid)
@@ -1688,7 +1690,8 @@ class RedisStore:
                             clusters.append(cluster)
             return clusters
 
-        ids = self._smembers(self._cluster_all_key(project_id))
+        # Use ZRANGE with rev=True to get clusters sorted by created_at descending (newest first)
+        ids = self._zrange(self._cluster_all_key(project_id), 0, -1, rev=True)
         clusters: List[IssueCluster] = []
         for cid in ids:
             # ids are stored as strings in redis (can be UUID or custom format)
