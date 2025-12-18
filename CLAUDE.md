@@ -4,26 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Soulcaster** is a feedback triage and automated fix generation system. It ingests bug reports from Reddit, Sentry, and GitHub issues, clusters similar feedback using embeddings, and can trigger a coding agent to generate fixes and open PRs.
+**Soulcaster** is a feedback triage and automated fix generation system. It ingests bug reports from Reddit, Sentry, and GitHub issues, clusters similar feedback using embeddings, and triggers a coding agent to generate fixes and open PRs.
 
 **Flow**: Reddit/Sentry/GitHub → Clustered Issues → Dashboard Triage → Coding Agent → GitHub PR
 
 ## Architecture
 
-Three components that share an Upstash Redis store:
+Three components sharing Upstash Redis:
 
-1. **Backend** (`/backend`) - FastAPI service for ingestion and clustering
-2. **Dashboard** (`/dashboard`) - Next.js web UI for triage and management
-3. **Coding Agent** (`/coding-agent`) - Standalone script that fixes issues via Kilo CLI
+1. **Backend** (`/backend`) - FastAPI service for ingestion, clustering, and agent orchestration
+2. **Dashboard** (`/dashboard`) - Next.js 16 (App Router) web UI for triage and management
+3. **Coding Agent** (`/coding-agent`) - Standalone script that fixes issues via E2B sandboxes
 
 ### Tech Stack
 
-- **Backend**: FastAPI, Pydantic, redis-py or Upstash REST
-- **Dashboard**: Next.js 16 (App Router), TypeScript, Tailwind, `@google/genai` for embeddings
-- **Storage**: Upstash Redis (or local Redis) + Upstash Vector for embeddings
-- **Embeddings**: Gemini (`gemini-embedding-001`) for server-side clustering
-- **Vector DB**: Upstash Vector for efficient similarity search (ANN)
-- **LLM Summaries**: Gemini (`gemini-2.5-flash`) for cluster summaries
+- **Backend**: FastAPI, Pydantic, redis-py, Upstash REST, Gemini embeddings, E2B sandboxes
+- **Dashboard**: Next.js 16, TypeScript, Tailwind, NextAuth (GitHub OAuth), Prisma (PostgreSQL)
+- **Storage**: Upstash Redis + Upstash Vector for embeddings
+- **LLM**: Gemini (`gemini-embedding-001` for embeddings, `gemini-2.5-flash` for summaries)
 
 ## Development Commands
 
@@ -32,33 +30,28 @@ Three components that share an Upstash Redis store:
 ```bash
 pip install -r backend/requirements.txt
 
-# Run API server
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000   # API server
+python -m backend.reddit_poller                  # Reddit poller (separate process)
 
-# Run Reddit poller (separate process)
-python -m backend.reddit_poller
-
-# Run all tests
-pytest backend/tests -v
-
-# Run single test file
-pytest backend/tests/test_clusters.py -v
-
-# Run specific test
-pytest backend/tests/test_clusters.py::test_list_clusters -v
+pytest backend/tests -v                          # All tests
+pytest backend/tests/test_clusters.py -v         # Single test file
+pytest backend/tests/test_clusters.py::test_list_clusters -v  # Specific test
 ```
 
 ### Dashboard (from `/dashboard`)
 
 ```bash
 npm install
-npm run dev          # Development server (port 3000)
-npm run build        # Production build
-npm run lint         # ESLint
-npm run format       # Prettier
-npm run type-check   # TypeScript check
-npm test             # Jest tests
-npm run test:watch   # Jest watch mode
+npx prisma migrate dev        # Setup/migrate database
+npx prisma generate           # Regenerate Prisma client
+
+npm run dev                   # Development server (port 3000)
+npm run build                 # Production build (runs prisma generate first)
+npm run lint                  # ESLint
+npm run format                # Prettier
+npm run type-check            # TypeScript check
+npm test                      # Jest tests
+npm run test:watch            # Jest watch mode
 ```
 
 ### Coding Agent
@@ -67,23 +60,19 @@ npm run test:watch   # Jest watch mode
 python coding-agent/fix_issue.py <github-issue-url> --job-id <optional-job-id>
 ```
 
-Requires: `GH_TOKEN`, `GIT_USER_EMAIL`, `GIT_USER_NAME`, and either `GEMINI_API_KEY` or `MINIMAX_API_KEY`.
-
 ## Key Files
 
 **Backend**:
-- `backend/main.py` - FastAPI routes (`/ingest/*`, `/clusters`, `/feedback`, `/jobs`)
+- `backend/main.py` - FastAPI routes (`/ingest/*`, `/clusters`, `/feedback`, `/jobs`, `/cluster-jobs`)
 - `backend/store.py` - Redis/in-memory storage abstraction
 - `backend/models.py` - Pydantic models (`FeedbackItem`, `IssueCluster`, `AgentJob`)
-- `backend/reddit_poller.py` - Reddit ingestion via requests
 
 **Dashboard**:
-- `dashboard/lib/clustering.ts` - Legacy centroid-based clustering logic
-- `dashboard/lib/vector.ts` - **Vector DB-based clustering** (recommended)
+- `dashboard/lib/vector.ts` - Vector DB-based clustering (recommended)
+- `dashboard/lib/clustering.ts` - Legacy centroid-based clustering
 - `dashboard/lib/redis.ts` - Upstash Redis client helpers
-- `dashboard/app/api/clusters/run/route.ts` - Legacy clustering endpoint
-- `dashboard/app/api/clusters/run-vector/route.ts` - **Vector-based clustering endpoint** (recommended)
-- `dashboard/app/clusters/page.tsx` - Cluster list UI
+- `dashboard/app/api/clusters/run-vector/route.ts` - Vector clustering endpoint
+- `dashboard/prisma/schema.prisma` - Database schema (auth, projects)
 
 ## Redis Data Model
 
@@ -91,138 +80,68 @@ Requires: `GH_TOKEN`, `GIT_USER_EMAIL`, `GIT_USER_NAME`, and either `GEMINI_API_
 feedback:{id}        - Hash: id, source, title, body, metadata, created_at, clustered
 feedback:created     - Sorted set: all feedback IDs by timestamp
 feedback:unclustered - Set: IDs pending clustering
-cluster:{id}         - Hash: id, title, summary, status, centroid, issue_title, etc.
+cluster:{id}         - Hash: id, title, summary, status, centroid, issue_title
 cluster:items:{id}   - Set: feedback IDs in cluster
 clusters:all         - Set: all cluster IDs
 job:{id}             - Hash: id, cluster_id, status, logs, created_at
 ```
 
-## Clustering
+## Clustering Algorithm (Vector-Based)
 
-### Vector-Based Clustering (Recommended)
-
-See `docs/DESIGN_DECISIONS.md` for full rationale on threshold and architecture choices.
-
-**Algorithm** (`lib/vector.ts`):
 1. Generate embedding via Gemini API for `title + body`
 2. Query Upstash Vector for similar feedback items (top-K ANN search)
 3. If top match ≥ 0.72 threshold AND already clustered → join that cluster
 4. If top matches ≥ 0.72 but unclustered → create new cluster with all similar items
 5. If no matches above threshold → create new single-item cluster
 6. Store embedding in Vector DB with cluster assignment metadata
-7. Calculate cluster cohesion score (tight/moderate/loose)
-8. Generate LLM summary for new/changed clusters
-
-**Key exports** (`lib/vector.ts`):
-- `VectorStore` - Upstash Vector client wrapper
-- `clusterWithVectorDB()` - Single item clustering
-- `processNewFeedbackWithVector()` - Full flow: embed → cluster → store
-- `generateFeedbackEmbedding()` - Gemini embedding generation
-
-### Legacy Centroid-Based Clustering
-
-**Algorithm** (`lib/clustering.ts`):
-1. Generate embeddings via Gemini API for `title + body`
-2. Compare each embedding to existing cluster centroids using cosine similarity
-3. If similarity ≥ 0.65: add to cluster, update centroid incrementally
-4. Else: create new cluster
-5. Generate LLM summary for changed clusters only
-
-**Key classes**:
-- `ClusteringBatch` - Optimized batch processing with change tracking
-- `cosineSimilarity()`, `calculateCentroid()`, `findBestCluster()` - Pure functions
+7. Generate LLM summary for new/changed clusters
 
 ## Environment Variables
 
+**Backend** (`.env` in project root):
+```bash
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+GEMINI_API_KEY=
+GITHUB_ID=                    # GitHub OAuth client ID
+GITHUB_SECRET=                # GitHub OAuth client secret
+E2B_API_KEY=                  # For E2B sandbox provisioning
+KILOCODE_TEMPLATE_NAME=kilo-sandbox-v-0-1-dev
+```
+
 **Dashboard** (`.env.local` in `/dashboard`):
 ```bash
-# Upstash Redis (required)
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token-here
-
-# GitHub OAuth (REQUIRED for beta)
-# Create OAuth app at: https://github.com/settings/developers
-# Authorization callback URL: http://localhost:3000/api/auth/callback/github
-# Scopes requested: repo, read:user
-GITHUB_ID=your-github-oauth-client-id
-GITHUB_SECRET=your-github-oauth-client-secret
-
-# NextAuth (REQUIRED)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+UPSTASH_VECTOR_REST_URL=
+UPSTASH_VECTOR_REST_TOKEN=
+GEMINI_API_KEY=
+GITHUB_ID=
+GITHUB_SECRET=
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
-
-# Database (REQUIRED)
+NEXTAUTH_SECRET=              # Generate: openssl rand -base64 32
 DATABASE_URL=postgresql://user:password@localhost:5432/soulcaster
-
-# Backend API URL (REQUIRED)
 BACKEND_URL=http://localhost:8000
-
-# Reddit API (optional - for automated polling)
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-REDDIT_USER_AGENT=
-
-# LLM Provider (for Gemini embeddings/clustering)
-GEMINI_API_KEY=your-gemini-api-key
-```
-
-**Required for Backend** (create `.env` in project root):
-
-```bash
-# Redis (same as dashboard)
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token-here
-
-# GitHub OAuth (same as dashboard)
-GITHUB_ID=your-github-oauth-client-id
-GITHUB_SECRET=your-github-oauth-client-secret
-
-# LLM Provider (REQUIRED)
-GEMINI_API_KEY=your-gemini-api-key
-
-# E2B Sandbox (REQUIRED for coding agent)
-E2B_API_KEY=your-e2b-api-key
-KILOCODE_TEMPLATE_NAME=kilo-sandbox-v-0-1-dev
-
-# Coding Agent Runner (default: sandbox_kilo)
-CODING_AGENT_RUNNER=sandbox_kilo
-```
-
-**How GitHub Authentication Works**:
-- Users MUST sign in with GitHub OAuth (required for all environments)
-- Access token stored securely in NextAuth session (encrypted)
-- Token passed to backend when creating PRs
-- PRs created from user's account (e.g., @username)
-- No fallback to personal access tokens - OAuth is required
-- Future: GitHub App support for bot-based PRs (soulcaster[bot])
-
-**Coding Agent**:
-```bash
-GH_TOKEN=
-GIT_USER_EMAIL=
-GIT_USER_NAME=
-GEMINI_API_KEY=  # or MINIMAX_API_KEY
-BACKEND_URL=     # for job status updates
 ```
 
 ## API Endpoints
 
 **Backend** (`:8000`):
-- `POST /ingest/reddit` - Ingest Reddit feedback
-- `POST /ingest/sentry` - Ingest Sentry webhook
-- `POST /ingest/manual` - Manual text submission
-- `GET /feedback` - List feedback (supports `?source=`, `?limit=`, `?offset=`)
-- `GET /clusters` - List all clusters
-- `GET /clusters/{id}` - Cluster detail with feedback items
+- `POST /ingest/reddit|sentry|manual` - Ingest feedback
+- `GET /feedback` - List feedback (`?source=`, `?limit=`, `?offset=`)
+- `GET /clusters`, `GET /clusters/{id}` - List/detail clusters
 - `POST /clusters/{id}/start_fix` - Mark cluster as "fixing"
-- `POST /admin/trigger-poll` - Manually trigger Reddit poll
-- `GET/POST /config/reddit/subreddits` - Manage monitored subreddits
-- `POST /jobs` - Create agent job
-- `PATCH /jobs/{id}` - Update job status/logs
+- `POST /cluster-jobs` - Trigger backend clustering job
+- `POST /jobs`, `PATCH /jobs/{id}` - Manage agent jobs
 
 **Dashboard** (`:3000/api`):
-- `POST /api/clusters/run` - Run legacy centroid-based clustering
-- `POST /api/clusters/run-vector` - **Run vector-based clustering** (recommended, 0.82 threshold)
-- `POST /api/clusters/cleanup` - Merge duplicate clusters by centroid similarity
-- `POST /api/clusters/reset` - Clear all clusters (debugging)
-- `POST /api/trigger-agent` - Trigger coding agent via ECS
+- `POST /api/clusters/run-vector` - Run vector-based clustering
+- `POST /api/clusters/cleanup` - Merge duplicate clusters
+- `POST /api/trigger-agent` - Trigger coding agent
+
+## GitHub Authentication
+
+- Users sign in via GitHub OAuth (required)
+- Access token stored in encrypted NextAuth session
+- PRs created from user's account (not a bot)
+- Scopes: `repo`, `read:user`
