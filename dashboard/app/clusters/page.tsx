@@ -286,17 +286,6 @@ export default function ClustersListPage() {
           </div>
         )}
 
-        {error && (
-          <div className="rounded-lg bg-red-900/20 p-4 mb-6 border border-red-900/50">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-400">Error</h3>
-                <div className="mt-2 text-sm text-red-300">{error}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="animate-in delay-200 overflow-hidden sm:p-8 hover-card-effect group bg-gradient-to-br from-emerald-500/5 to-emerald-600/10 rounded-3xl pt-6 pr-6 pb-6 pl-6 relative shadow-[0_0_60px_rgba(16,185,129,0.1)] border border-white/10">
           <div className="pointer-events-none absolute inset-0 opacity-30">
             <div className="absolute right-0 top-0 h-96 w-96 -translate-y-10 translate-x-10 rounded-full bg-emerald-500/10 blur-3xl"></div>
@@ -339,14 +328,7 @@ export default function ClustersListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {clusters.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                        No clusters yet. They will appear once backend clustering completes after ingestion.
-                      </td>
-                    </tr>
-                  ) : (
-                    clusters.map((cluster) => (
+                  {clusters.map((cluster) => (
                       <tr key={cluster.id} className="group transition-colors hover:bg-white/5">
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
@@ -413,8 +395,7 @@ export default function ClustersListPage() {
                           </Link>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    ))}
                 </tbody>
               </table>
             </div>
