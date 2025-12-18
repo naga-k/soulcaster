@@ -225,7 +225,7 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
                 <input
                   id={field.id}
                   type="text"
-                  value={formData[field.id] || field.placeholder || ''}
+                  value={formData[field.id] ?? ''}
                   onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                   placeholder={field.placeholder}
                   readOnly={field.readOnly}
@@ -236,7 +236,7 @@ export default function IntegrationCard({ config, onSave, onToggle }: Integratio
                 {field.copyButton && (
                   <button
                     type="button"
-                    onClick={() => copyToClipboard(formData[field.id] || field.placeholder || '', field.id)}
+                    onClick={() => copyToClipboard(String(formData[field.id] ?? ''), field.id)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-emerald-300 transition-colors"
                     aria-label="Copy to clipboard"
                     title="Copy to clipboard"

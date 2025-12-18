@@ -235,35 +235,22 @@ export default function IntegrationsDirectory({
 
   // Save handlers for each integration
   const handleSplunkSave = async (data: Record<string, any>) => {
-    // Save token
-    if (data.webhook_token) {
-      const tokenRes = await fetch(`${BACKEND_URL}/config/splunk/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: resolvedProjectId,
-          token: data.webhook_token,
-        }),
-      });
-      if (!tokenRes.ok) throw new Error('Failed to save webhook token');
+    const payload: { webhook_token?: string; allowed_searches?: string[] } = {};
+    if (data.webhook_token !== undefined) {
+      payload.webhook_token = data.webhook_token;
     }
-
-    // Save allowed searches
-    if (data.allowed_searches) {
-      const searches = data.allowed_searches
+    if (data.allowed_searches !== undefined) {
+      payload.allowed_searches = data.allowed_searches
         .split('\n')
         .map((s: string) => s.trim())
         .filter(Boolean);
-      const searchesRes = await fetch(`${BACKEND_URL}/config/splunk/searches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: resolvedProjectId,
-          searches,
-        }),
-      });
-      if (!searchesRes.ok) throw new Error('Failed to save allowed searches');
     }
+    const res = await fetch(`${BACKEND_URL}/config/splunk?project_id=${resolvedProjectId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to save Splunk configuration');
   };
 
   const handleDatadogSave = async (data: Record<string, any>) => {
@@ -308,44 +295,22 @@ export default function IntegrationsDirectory({
   };
 
   const handleSentrySave = async (data: Record<string, any>) => {
-    // Save webhook secret
-    if (data.webhook_secret) {
-      const secretRes = await fetch(`${BACKEND_URL}/config/sentry/secret`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: resolvedProjectId,
-          secret: data.webhook_secret,
-        }),
-      });
-      if (!secretRes.ok) throw new Error('Failed to save webhook secret');
+    const payload: { webhook_secret?: string; environments?: string[]; levels?: string[] } = {};
+    if (data.webhook_secret !== undefined) {
+      payload.webhook_secret = data.webhook_secret;
     }
-
-    // Save environments
-    if (data.environments) {
-      const envsRes = await fetch(`${BACKEND_URL}/config/sentry/environments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: resolvedProjectId,
-          environments: data.environments,
-        }),
-      });
-      if (!envsRes.ok) throw new Error('Failed to save environments');
+    if (data.environments !== undefined) {
+      payload.environments = data.environments;
     }
-
-    // Save levels
-    if (data.levels) {
-      const levelsRes = await fetch(`${BACKEND_URL}/config/sentry/levels`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: resolvedProjectId,
-          levels: data.levels,
-        }),
-      });
-      if (!levelsRes.ok) throw new Error('Failed to save severity levels');
+    if (data.levels !== undefined) {
+      payload.levels = data.levels;
     }
+    const res = await fetch(`${BACKEND_URL}/config/sentry?project_id=${resolvedProjectId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to save Sentry configuration');
   };
 
   const integrations: IntegrationItem[] = [

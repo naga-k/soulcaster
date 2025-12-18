@@ -5,7 +5,8 @@ converting them into FeedbackItems for clustering and analysis.
 """
 
 import json
-from datetime import datetime
+import hmac
+from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import uuid4
 
@@ -48,11 +49,11 @@ def splunk_alert_to_feedback_item(alert: dict, project_id: str) -> FeedbackItem:
     time_value = result.get("_time")
     if time_value:
         try:
-            created_at = datetime.fromtimestamp(int(time_value))
+            created_at = datetime.fromtimestamp(int(time_value), tz=timezone.utc)
         except (ValueError, TypeError):
-            created_at = datetime.now()
+            created_at = datetime.now(timezone.utc)
     else:
-        created_at = datetime.now()
+        created_at = datetime.now(timezone.utc)
 
     return FeedbackItem(
         id=uuid4(),
@@ -95,7 +96,7 @@ def verify_token(provided_token: Optional[str], project_id: str) -> bool:
         # If no token is configured, reject all requests for security
         return False
 
-    return provided_token == configured_token
+    return hmac.compare_digest(provided_token, configured_token)
 
 
 def get_splunk_webhook_token(project_id: str) -> Optional[str]:

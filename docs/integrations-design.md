@@ -10,7 +10,7 @@ This document specifies the next wave of integrations for Soulcaster: **Datadog*
 
 All integrations follow a unified pattern:
 
-```
+```text
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   External API  │────▶│  Ingestion Route │────▶│  FeedbackItem   │
 │   (webhook/poll)│     │  POST /ingest/*  │     │  (normalized)   │
@@ -41,7 +41,7 @@ Ingest Datadog alerts (monitors, APM errors, log alerts) as feedback items for c
 
 ### Data Flow
 
-```
+```text
 Datadog Monitor Alert
        │
        ▼
@@ -110,7 +110,7 @@ def datadog_event_to_feedback_item(event: dict, project_id: str) -> FeedbackItem
 
 ### Configuration (Redis)
 
-```
+```text
 config:datadog:{project_id}:webhook_secret  → Optional signing secret
 config:datadog:{project_id}:monitors        → List of monitor IDs to track (or "*" for all)
 config:datadog:{project_id}:tags_filter     → Tags to include/exclude
@@ -148,7 +148,7 @@ Ingest PostHog session replay errors, exception events, and action triggers as f
 
 PostHog supports webhooks via **Actions** or direct API polling for events:
 
-```
+```text
 PostHog Action Webhook  ─────┐
                               ▼
                    POST /ingest/posthog/webhook
@@ -217,7 +217,7 @@ def posthog_event_to_feedback_item(event: dict, project_id: str) -> FeedbackItem
 
 ### Configuration (Redis)
 
-```
+```text
 config:posthog:{project_id}:api_key         → PostHog personal API key
 config:posthog:{project_id}:project_id      → PostHog project ID
 config:posthog:{project_id}:event_types     → List: ["$exception", "$error", ...]
@@ -258,7 +258,7 @@ Basic webhook handling exists in `backend/main.py`. This enhancement adds:
 
 ### Enhanced Data Flow
 
-```
+```text
 Sentry Issue Webhook
        │
        ▼
@@ -319,7 +319,7 @@ def sentry_event_to_feedback_item(event: dict, project_id: str) -> FeedbackItem:
 
 ### Configuration (Redis)
 
-```
+```text
 config:sentry:{project_id}:webhook_secret   → Client secret for verification
 config:sentry:{project_id}:environments     → List of envs to track ["production", "staging"]
 config:sentry:{project_id}:levels           → List of levels ["error", "fatal"]
@@ -355,7 +355,7 @@ Ingest Splunk alerts from saved searches and real-time alerts as feedback items.
 
 ### Data Flow
 
-```
+```text
 Splunk Saved Search Alert
        │
        ▼
@@ -430,7 +430,7 @@ def splunk_alert_to_feedback_item(alert: dict, project_id: str) -> FeedbackItem:
 
 ### Configuration (Redis)
 
-```
+```text
 config:splunk:{project_id}:webhook_token    → Token for basic auth
 config:splunk:{project_id}:searches         → List of saved search names to track
 config:splunk:{project_id}:sourcetypes      → Sourcetypes to include

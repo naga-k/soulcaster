@@ -12,8 +12,6 @@ import json
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import Request
-
 logger = logging.getLogger(__name__)
 
 

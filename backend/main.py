@@ -85,6 +85,7 @@ from planner import generate_plan
 from github_client import fetch_repo_issues, issue_to_feedback_item
 from clustering_runner import maybe_start_clustering, run_clustering_job
 from agent_runner import get_runner
+from reddit_poller import poll_once
 from splunk_client import (
     splunk_alert_to_feedback_item,
     verify_token,
@@ -300,6 +301,9 @@ async def ingest_sentry(
     """
     try:
         pid = _require_project_id(project_id)
+        enabled = get_sentry_config_value(pid, "enabled")
+        if enabled is False:
+            return {"status": "filtered", "project_id": str(pid)}
 
         # Read raw body and parse JSON
         body = await request.body()
@@ -420,6 +424,9 @@ def ingest_splunk_webhook(
         HTTPException: 401 if token is missing/invalid, 400 if project_id missing.
     """
     pid = _require_project_id(project_id)
+    enabled = get_splunk_config_value(pid, "enabled")
+    if enabled is False:
+        return {"status": "filtered", "project_id": pid}
 
     # Token authentication: check query param first, then header
     provided_token = token or x_splunk_token
@@ -430,7 +437,7 @@ def ingest_splunk_webhook(
     search_name = payload.get("search_name", "")
     if not is_search_allowed(search_name, pid):
         # Return success but don't create item (silent filter)
-        return {"status": "ok", "message": "Search filtered", "project_id": pid}
+        return {"status": "filtered", "project_id": pid}
 
     # Convert to FeedbackItem
     try:
@@ -478,12 +485,15 @@ async def ingest_datadog_webhook(
         x_datadog_signature: Optional signature header for webhook verification.
 
     Returns:
-        dict: Status response with "ok", "duplicate", or "skipped".
+        dict: Status response with "ok", "duplicate", or "filtered".
 
     Raises:
         HTTPException: If signature is invalid (401) or processing fails (500).
     """
     pid = _require_project_id(project_id)
+    enabled = get_datadog_config_value(pid, "enabled")
+    if enabled is False:
+        return {"status": "filtered", "project_id": pid}
 
     # 1. Verify signature if secret is configured
     webhook_secret = get_datadog_webhook_secret_for_project(pid)
@@ -505,7 +515,11 @@ async def ingest_datadog_webhook(
 
         # Check if wildcard or specific match
         if "*" not in configured_monitors and monitor_id not in configured_monitors:
-            return {"status": "skipped", "message": "Monitor not configured for ingestion"}
+            return {
+                "status": "filtered",
+                "message": "Monitor not configured for ingestion",
+                "project_id": pid,
+            }
 
     # 3. Convert to FeedbackItem
     try:
@@ -519,7 +533,7 @@ async def ingest_datadog_webhook(
     if item.external_id:
         existing = get_feedback_by_external_id(pid, item.source, item.external_id)
         if existing:
-            return {"status": "duplicate", "id": str(existing.id)}
+            return {"status": "duplicate", "id": str(existing.id), "project_id": pid}
 
     # 5. Add item and trigger clustering
     add_feedback_item(item)
@@ -551,6 +565,9 @@ def ingest_posthog_webhook(payload: dict, project_id: Optional[str] = Query(None
     """
     # Validate project_id first (this will raise HTTPException with 400 if missing)
     pid = _require_project_id(project_id)
+    enabled = get_posthog_config_value(pid, "enabled")
+    if enabled is False:
+        return {"status": "filtered", "project_id": str(pid)}
 
     try:
         # Extract the event data from the webhook payload
@@ -603,6 +620,9 @@ def ingest_posthog_sync(project_id: Optional[str] = Query(None)):
     """
     # Validate project_id first (this will raise HTTPException with 400 if missing)
     pid = _require_project_id(project_id)
+    enabled = get_posthog_config_value(pid, "enabled")
+    if enabled is False:
+        return {"status": "filtered", "project_id": str(pid)}
 
     try:
         # TODO: Read configuration from Redis
@@ -1005,6 +1025,12 @@ class SplunkSearchesConfig(BaseModel):
     searches: List[str]
 
 
+class SplunkConfigUpdate(BaseModel):
+    """Payload for updating Splunk configuration in one request."""
+    webhook_token: Optional[str] = None
+    allowed_searches: Optional[List[str]] = None
+
+
 @app.get("/config/splunk")
 def get_splunk_config(project_id: Optional[str] = Query(None)):
     """
@@ -1036,6 +1062,27 @@ def get_splunk_config(project_id: Optional[str] = Query(None)):
         "enabled": enabled,
         "project_id": str(pid)
     }
+
+
+@app.post("/config/splunk")
+def update_splunk_config(payload: SplunkConfigUpdate, project_id: Optional[str] = Query(None)):
+    """
+    Update the Splunk configuration for a project in a single request.
+
+    Parameters:
+        payload (SplunkConfigUpdate): Object containing the webhook token and/or allowed searches.
+        project_id (str): Project identifier.
+
+    Returns:
+        dict: {"status": "ok"}
+    """
+    pid = _require_project_id(project_id)
+    if payload.webhook_token is not None:
+        set_splunk_webhook_token(pid, payload.webhook_token)
+    if payload.allowed_searches is not None:
+        set_splunk_allowed_searches(pid, payload.allowed_searches)
+
+    return {"status": "ok"}
 
 
 @app.post("/config/splunk/token")
@@ -1233,6 +1280,13 @@ class SentryLevelsConfig(BaseModel):
     levels: List[str]
 
 
+class SentryConfigUpdate(BaseModel):
+    """Payload for updating Sentry configuration in one request."""
+    webhook_secret: Optional[str] = None
+    environments: Optional[List[str]] = None
+    levels: Optional[List[str]] = None
+
+
 class IntegrationEnabledConfig(BaseModel):
     """Payload for configuring integration enabled state."""
     enabled: bool
@@ -1272,6 +1326,29 @@ def get_sentry_config_endpoint(project_id: Optional[str] = Query(None)):
         "enabled": enabled,
         "project_id": str(pid)
     }
+
+
+@app.post("/config/sentry")
+def update_sentry_config(payload: SentryConfigUpdate, project_id: Optional[str] = Query(None)):
+    """
+    Update the Sentry configuration for a project in a single request.
+
+    Parameters:
+        payload (SentryConfigUpdate): Object containing webhook secret, environments, and/or levels.
+        project_id (str): Project identifier.
+
+    Returns:
+        dict: {"status": "ok"}
+    """
+    pid = _require_project_id(project_id)
+    if payload.webhook_secret is not None:
+        set_sentry_config_value(pid, "webhook_secret", payload.webhook_secret)
+    if payload.environments is not None:
+        set_sentry_config_value(pid, "environments", payload.environments)
+    if payload.levels is not None:
+        set_sentry_config_value(pid, "levels", payload.levels)
+
+    return {"status": "ok"}
 
 
 @app.post("/config/sentry/secret")

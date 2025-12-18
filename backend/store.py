@@ -1946,16 +1946,6 @@ class RedisStore:
         except json.JSONDecodeError:
             return None
 
-        if keys:
-            self._delete(*keys)
-        # Also clear Datadog config
-        datadog_secret_keys = list(self._scan_iter("config:datadog:*:webhook_secret"))
-        if datadog_secret_keys:
-            self._delete(*datadog_secret_keys)
-        datadog_monitor_keys = list(self._scan_iter("config:datadog:*:monitors"))
-        if datadog_monitor_keys:
-            self._delete(*datadog_monitor_keys)
-
     # Config (Datadog)
     def set_datadog_webhook_secret(self, secret: str, project_id: UUID) -> str:
         """
