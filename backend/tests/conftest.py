@@ -33,13 +33,26 @@ def mock_store():
 @pytest.fixture(autouse=True)
 def clear_data(mock_store):
     """
-    Clear project-scoped data between tests.
+    Clear test data at project scope so each test starts with a clean in-memory store.
     
-    Removes all jobs, clusters, and feedback items from the in-memory store so each test starts with a clean state.
+    Removes all jobs, clusters, and feedback items.
     """
     clear_jobs()
     clear_clusters()
     clear_feedback_items()
+    from store import clear_coding_plans
+    clear_coding_plans()
+
+
+@pytest.fixture
+def anyio_backend():
+    """
+    Select the AnyIO backend used by tests.
+    
+    Returns:
+        str: The name of the AnyIO backend to use, `"asyncio"`.
+    """
+    return "asyncio"
 
 
 @pytest.fixture()

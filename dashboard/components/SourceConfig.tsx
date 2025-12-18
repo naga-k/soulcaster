@@ -71,12 +71,14 @@ export default function SourceConfig() {
       icon: '🗨️',
       title: 'Reddit Integration',
       description: 'Monitor subreddits (JSON polling, no OAuth)',
+      enabled: false,
     },
     {
       type: 'github' as const,
       icon: '⚙️',
       title: 'GitHub Issues',
       description: 'Sync open-source repository issues automatically',
+      enabled: true,
     },
   ];
 
@@ -219,23 +221,39 @@ export default function SourceConfig() {
       <h3 className="text-lg font-semibold text-white mb-4 relative z-10">Configure Feedback Sources</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 relative z-10">
-        {sources.map((source) => (
-          <button
-            key={source.type}
-            onClick={() => setSelectedSource(source.type)}
-            className={`p-4 border-2 rounded-2xl text-left transition-all ${selectedSource === source.type
-              ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
-              : 'border-white/5 bg-black/20 hover:border-white/10 hover:bg-black/30'
-              }`}
-          >
-            <div className="text-2xl mb-2">{source.icon}</div>
-            <h4 className={`font-semibold ${selectedSource === source.type ? 'text-emerald-300' : 'text-slate-200'}`}>{source.title}</h4>
-            <p className="text-sm text-slate-400 mt-1">{source.description}</p>
-          </button>
-        ))}
+        {sources.map((source) => {
+          const isSelected = selectedSource === source.type;
+          return (
+            <button
+              key={source.type}
+              type="button"
+              disabled={!source.enabled}
+              onClick={() => {
+                if (source.enabled) setSelectedSource(source.type);
+              }}
+              className={`p-4 border-2 rounded-2xl text-left transition-all ${isSelected
+                ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                : 'border-white/5 bg-black/20 hover:border-white/10 hover:bg-black/30'
+                } ${!source.enabled ? 'opacity-50 cursor-not-allowed hover:border-white/5 hover:bg-black/20' : ''}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-2xl">{source.icon}</div>
+                {!source.enabled && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
+                    Coming soon
+                  </span>
+                )}
+              </div>
+              <h4 className={`mt-1 font-semibold ${isSelected ? 'text-emerald-300' : 'text-slate-200'}`}>
+                {source.title}
+              </h4>
+              <p className="text-sm text-slate-400 mt-1">{source.description}</p>
+            </button>
+          );
+        })}
       </div>
 
-      {selectedSource === 'reddit' && (
+      {selectedSource === 'reddit' && sources.find((s) => s.type === 'reddit')?.enabled && (
         <div className="border-t border-white/10 pt-4 space-y-4 relative z-10">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -447,9 +465,6 @@ export default function SourceConfig() {
 
             {repoMessage && <p className="text-sm text-emerald-400">{repoMessage}</p>}
             {repoError && <p className="text-sm text-rose-400">{repoError}</p>}
-            <p className="text-xs text-slate-500">
-              Supports public repos. Uses your session token for higher rate limits (5000/hr vs 60/hr).
-            </p>
           </div>
         </div>
       )}

@@ -80,15 +80,15 @@ export default function DashboardHeader({
             >
               PRs
             </Link>
-            <Link
-              href="/billing"
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${pathname.startsWith('/billing') || activePage === 'billing'
-                ? 'bg-white/5 text-emerald-400'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                }`}
+            <span
+              aria-disabled="true"
+              className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed select-none"
             >
               Billing
-            </Link>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
+                Coming soon
+              </span>
+            </span>
           </nav>
         </div>
 
