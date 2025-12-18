@@ -428,6 +428,10 @@ def ingest_splunk_webhook(
             return {"status": "duplicate", "id": str(existing.id), "project_id": pid}
 
     # Store and trigger clustering
+    add_feedback_item(item)
+    _kickoff_clustering(pid)
+
+    return {"status": "ok", "id": str(item.id), "project_id": pid}
 
 
 # ============================================================

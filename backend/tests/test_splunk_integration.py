@@ -10,6 +10,8 @@ from store import (
     get_all_feedback_items,
     get_feedback_by_external_id,
 )
+from splunk_client import set_splunk_webhook_token, set_splunk_allowed_searches
+from store import _STORE
 
 client = TestClient(app)
 
@@ -18,17 +20,18 @@ def setup_function():
     """Reset test data before each test."""
     clear_feedback_items()
     clear_clusters()
+    # Clear Splunk config to ensure test isolation
+    pid = "22222222-2222-2222-2222-222222222222"
+    _STORE.set(f"config:splunk:{pid}:webhook_token", None)
+    _STORE.set(f"config:splunk:{pid}:searches", None)
 
 
-def test_splunk_webhook_creates_feedback_item(project_context, monkeypatch):
+def test_splunk_webhook_creates_feedback_item(project_context):
     """Alert payload creates FeedbackItem with log data."""
     pid = project_context["project_id"]
 
     # Set webhook token for auth
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token_123"
-    )
+    set_splunk_webhook_token(str(pid), "test_token_123")
 
     payload = {
         "result": {
@@ -53,20 +56,17 @@ def test_splunk_webhook_creates_feedback_item(project_context, monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
     assert items[0].source == "splunk"
     assert items[0].external_id == "scheduler__admin__search__1705315800"
 
 
-def test_splunk_search_name_in_title(project_context, monkeypatch):
+def test_splunk_search_name_in_title(project_context):
     """Search name is prefixed to title."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token_123"
-    )
+    set_splunk_webhook_token(str(pid), "test_token_123")
 
     payload = {
         "result": {
@@ -85,19 +85,16 @@ def test_splunk_search_name_in_title(project_context, monkeypatch):
 
     assert response.status_code == 200
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
     assert items[0].title == "[Splunk] Production Errors"
 
 
-def test_splunk_raw_log_preserved(project_context, monkeypatch):
+def test_splunk_raw_log_preserved(project_context):
     """Raw log line is preserved in body."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token_123"
-    )
+    set_splunk_webhook_token(str(pid), "test_token_123")
 
     raw_log = "2024-01-15 ERROR Critical failure in payment processing"
     payload = {
@@ -116,19 +113,16 @@ def test_splunk_raw_log_preserved(project_context, monkeypatch):
 
     assert response.status_code == 200
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
     assert items[0].body == raw_log
 
 
-def test_splunk_results_link_in_metadata(project_context, monkeypatch):
+def test_splunk_results_link_in_metadata(project_context):
     """Splunk results link is preserved for drill-down."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token_123"
-    )
+    set_splunk_webhook_token(str(pid), "test_token_123")
 
     results_link = "https://splunk.example.com/app/search?sid=test_sid"
     payload = {
@@ -152,7 +146,7 @@ def test_splunk_results_link_in_metadata(project_context, monkeypatch):
 
     assert response.status_code == 200
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
     assert items[0].metadata["results_link"] == results_link
     assert items[0].metadata["search_name"] == "App Errors"
@@ -161,19 +155,13 @@ def test_splunk_results_link_in_metadata(project_context, monkeypatch):
     assert items[0].metadata["sourcetype"] == "app_logs"
 
 
-def test_splunk_search_filter(project_context, monkeypatch):
+def test_splunk_search_filter(project_context):
     """Only configured saved searches are ingested."""
     pid = project_context["project_id"]
 
     # Configure to only accept "Critical Errors" search
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token_123"
-    )
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_allowed_searches",
-        lambda project_id: ["Critical Errors"]
-    )
+    set_splunk_webhook_token(str(pid), "test_token_123")
+    set_splunk_allowed_searches(str(pid), ["Critical Errors"])
 
     # This should be accepted
     allowed_payload = {
@@ -208,20 +196,17 @@ def test_splunk_search_filter(project_context, monkeypatch):
     # Should still return 200 but not create item
     assert response.status_code == 200
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     # Only the allowed search should create an item
     assert len(items) == 1
     assert items[0].metadata["search_name"] == "Critical Errors"
 
 
-def test_splunk_token_auth_required(project_context, monkeypatch):
+def test_splunk_token_auth_required(project_context):
     """Missing/invalid token returns 401."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "correct_token"
-    )
+    set_splunk_webhook_token(str(pid), "correct_token")
 
     payload = {
         "result": {
@@ -254,14 +239,11 @@ def test_splunk_token_auth_required(project_context, monkeypatch):
     assert response.status_code == 200
 
 
-def test_splunk_token_auth_via_header(project_context, monkeypatch):
+def test_splunk_token_auth_via_header(project_context):
     """Token can be provided via X-Splunk-Token header."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "header_token"
-    )
+    set_splunk_webhook_token(str(pid), "header_token")
 
     payload = {
         "result": {
@@ -280,14 +262,11 @@ def test_splunk_token_auth_via_header(project_context, monkeypatch):
     assert response.status_code == 200
 
 
-def test_splunk_minimal_payload(project_context, monkeypatch):
+def test_splunk_minimal_payload(project_context):
     """Handle minimal Splunk payload gracefully."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token"
-    )
+    set_splunk_webhook_token(str(pid), "test_token")
 
     # Minimal payload with just the essentials
     payload = {
@@ -303,20 +282,17 @@ def test_splunk_minimal_payload(project_context, monkeypatch):
 
     assert response.status_code == 200
 
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
     assert items[0].body == "Minimal log entry"
     assert items[0].title == "[Splunk] Splunk Alert"  # Default title
 
 
-def test_splunk_deduplication_by_sid(project_context, monkeypatch):
+def test_splunk_deduplication_by_sid(project_context):
     """Same SID should deduplicate."""
     pid = project_context["project_id"]
 
-    monkeypatch.setattr(
-        "splunk_client.get_splunk_webhook_token",
-        lambda project_id: "test_token"
-    )
+    set_splunk_webhook_token(str(pid), "test_token")
 
     payload = {
         "result": {
@@ -344,5 +320,5 @@ def test_splunk_deduplication_by_sid(project_context, monkeypatch):
     assert response2.json()["status"] == "duplicate"
 
     # Should only have one item
-    items = get_all_feedback_items()
+    items = get_all_feedback_items(str(pid))
     assert len(items) == 1
