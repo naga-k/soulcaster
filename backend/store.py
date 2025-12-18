@@ -307,6 +307,8 @@ class InMemoryStore:
         self.cluster_jobs: Dict[str, ClusterJob] = {}
         self.cluster_job_index: Dict[str, List[str]] = {}
         self.cluster_locks: Dict[str, str] = {}
+        # Generic key-value config storage
+        self.config: Dict[str, str] = {}
 
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
@@ -751,11 +753,34 @@ class InMemoryStore:
     def get_project(self, project_id: UUID | str) -> Optional[Project]:
         """
         Retrieve a project by its identifier.
-        
+
         Returns:
             Project or None: The Project with the given `project_id` if it exists, otherwise `None`.
         """
         return self.projects.get(str(project_id))
+
+    # Generic key-value config methods
+    def get(self, key: str) -> Optional[str]:
+        """
+        Retrieve a configuration value by key.
+
+        Args:
+            key: Configuration key.
+
+        Returns:
+            str or None: The value if it exists, otherwise None.
+        """
+        return self.config.get(key)
+
+    def set(self, key: str, value: str) -> None:
+        """
+        Set a configuration value.
+
+        Args:
+            key: Configuration key.
+            value: Configuration value to store.
+        """
+        self.config[key] = value
 
 
 class RedisStore:

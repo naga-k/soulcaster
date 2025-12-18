@@ -71,6 +71,11 @@ from planner import generate_plan
 from github_client import fetch_repo_issues, issue_to_feedback_item
 from clustering_runner import maybe_start_clustering, run_clustering_job
 from agent_runner import get_runner
+from splunk_client import (
+    splunk_alert_to_feedback_item,
+    verify_token,
+    is_search_allowed,
+)
 # Ensure runners are registered
 import agent_runner.sandbox
 import agent_runner.aws
@@ -283,6 +288,70 @@ def ingest_sentry(payload: dict, project_id: Optional[str] = Query(None)):
         raise HTTPException(
             status_code=500, detail=f"Failed to process Sentry payload: {str(e)}"
         ) from e
+
+
+# ============================================================
+# SPLUNK INTEGRATION
+# ============================================================
+@app.post("/ingest/splunk/webhook")
+def ingest_splunk_webhook(
+    payload: dict,
+    project_id: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
+    x_splunk_token: Optional[str] = Header(None, alias="X-Splunk-Token"),
+):
+    """
+    Receive Splunk alert webhooks and convert them to FeedbackItems.
+
+    Splunk alerts are sent via webhook when saved searches trigger. This endpoint
+    authenticates the request using a project-specific token, optionally filters
+    by allowed search names, and creates a FeedbackItem for clustering.
+
+    Parameters:
+        payload (dict): Splunk alert webhook payload containing result, sid, search_name, etc.
+        project_id (str): Project UUID to associate the feedback with (required).
+        token (str, optional): Authentication token via query parameter.
+        x_splunk_token (str, optional): Authentication token via X-Splunk-Token header.
+
+    Returns:
+        dict: {"status": "ok"|"duplicate"|"filtered", "id": "<uuid>", "project_id": "<uuid>"}
+              Returns "filtered" status when search is not in allowed list.
+
+    Raises:
+        HTTPException: 401 if token is missing/invalid, 400 if project_id missing.
+    """
+    pid = _require_project_id(project_id)
+
+    # Token authentication: check query param first, then header
+    provided_token = token or x_splunk_token
+    if not verify_token(provided_token, pid):
+        raise HTTPException(status_code=401, detail="Invalid or missing authentication token")
+
+    # Optional: Filter by allowed saved searches
+    search_name = payload.get("search_name", "")
+    if not is_search_allowed(search_name, pid):
+        # Return success but don't create item (silent filter)
+        return {"status": "ok", "message": "Search filtered", "project_id": pid}
+
+    # Convert to FeedbackItem
+    try:
+        item = splunk_alert_to_feedback_item(payload, pid)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process Splunk payload: {str(e)}"
+        ) from e
+
+    # Deduplication by external_id (sid)
+    if item.external_id:
+        existing = get_feedback_by_external_id(pid, item.source, item.external_id)
+        if existing:
+            return {"status": "duplicate", "id": str(existing.id), "project_id": pid}
+
+    # Store and trigger clustering
+    add_feedback_item(item)
+    _kickoff_clustering(pid)
+
+    return {"status": "ok", "id": str(item.id), "project_id": pid}
 
 
 class ManualIngestRequest(BaseModel):
