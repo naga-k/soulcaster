@@ -1,110 +1,255 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import IntegrationCard, { IntegrationConfig } from '@/components/settings/IntegrationCard';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 export default function IntegrationsPage() {
-  const [activeTab, setActiveTab] = useState<'monitoring' | 'analytics'>('monitoring');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as 'monitoring' | 'analytics' | null;
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'analytics'>(tabParam || 'monitoring');
+
+  // State for integration configs (will be loaded from backend)
+  const [integrationConfigs, setIntegrationConfigs] = useState<{
+    splunk: IntegrationConfig;
+    datadog: IntegrationConfig;
+    posthog: IntegrationConfig;
+    sentry: IntegrationConfig;
+  }>({
+    splunk: {
+      name: 'Splunk',
+      icon: '🔍',
+      description: 'Monitor logs and trigger alerts via webhook',
+      enabled: false,
+      fields: [
+        {
+          id: 'webhook_token',
+          label: 'Webhook Token',
+          type: 'password',
+          placeholder: 'Enter your webhook token',
+          helpText: 'This token will be used to authenticate webhook requests',
+          required: true,
+        },
+        {
+          id: 'webhook_url',
+          label: 'Webhook URL',
+          type: 'text',
+          placeholder: `${BACKEND_URL}/webhook/splunk`,
+          helpText: 'Use this URL in your Splunk webhook configuration',
+          copyButton: true,
+          readOnly: true,
+        },
+        {
+          id: 'allowed_searches',
+          label: 'Allowed Searches',
+          type: 'textarea',
+          placeholder: 'Enter allowed search names (one per line)',
+          helpText: 'Only alerts from these saved searches will be processed',
+        },
+      ],
+    },
+    datadog: {
+      name: 'Datadog',
+      icon: '🐕',
+      description: 'Receive monitor alerts and metrics',
+      enabled: false,
+      fields: [
+        {
+          id: 'webhook_secret',
+          label: 'Webhook Secret (Optional)',
+          type: 'password',
+          placeholder: 'Enter webhook secret for validation',
+          helpText: 'Leave empty to accept all webhook requests',
+        },
+        {
+          id: 'allowed_monitors',
+          label: 'Allowed Monitor IDs',
+          type: 'multiselect',
+          placeholder: 'Comma-separated monitor IDs, or "*" for all',
+          defaultValue: '*',
+          helpText: 'Use "*" to allow all monitors, or specify IDs like "123456,789012"',
+        },
+      ],
+    },
+    posthog: {
+      name: 'PostHog',
+      icon: '📊',
+      description: 'Track product analytics events',
+      enabled: false,
+      fields: [
+        {
+          id: 'event_types',
+          label: 'Event Types to Track',
+          type: 'checkbox',
+          options: ['$exception', '$error', 'custom_error'],
+          defaultValue: ['$exception', '$error'],
+          helpText: 'Select which event types should trigger feedback creation',
+        },
+      ],
+    },
+    sentry: {
+      name: 'Sentry',
+      icon: '⚠️',
+      description: 'Capture errors and performance issues',
+      enabled: false,
+      fields: [
+        {
+          id: 'webhook_secret',
+          label: 'Webhook Secret',
+          type: 'password',
+          placeholder: 'Enter your Sentry webhook secret',
+          helpText: 'Found in Sentry project settings → Integrations → Webhooks',
+          required: true,
+        },
+        {
+          id: 'environments',
+          label: 'Environments',
+          type: 'checkbox',
+          options: ['production', 'staging', 'development'],
+          defaultValue: ['production'],
+          helpText: 'Only issues from selected environments will be processed',
+        },
+        {
+          id: 'levels',
+          label: 'Severity Levels',
+          type: 'checkbox',
+          options: ['fatal', 'error', 'warning'],
+          defaultValue: ['fatal', 'error'],
+          helpText: 'Minimum severity level to capture',
+        },
+      ],
+    },
+  });
+
+  // Load initial enabled states from backend
+  useEffect(() => {
+    const loadIntegrationStates = async () => {
+      try {
+        const integrations = ['splunk', 'datadog', 'posthog', 'sentry'];
+        const results = await Promise.allSettled(
+          integrations.map(async (integration) => {
+            const res = await fetch(`${BACKEND_URL}/config/${integration}/enabled?project_id=default`);
+            if (res.ok) {
+              const data = await res.json();
+              return { integration, enabled: data.enabled };
+            }
+            return { integration, enabled: false };
+          })
+        );
+
+        setIntegrationConfigs((prev) => {
+          const updated = { ...prev };
+          results.forEach((result) => {
+            if (result.status === 'fulfilled') {
+              const { integration, enabled } = result.value;
+              if (updated[integration as keyof typeof updated]) {
+                updated[integration as keyof typeof updated] = {
+                  ...updated[integration as keyof typeof updated],
+                  enabled,
+                };
+              }
+            }
+          });
+          return updated;
+        });
+      } catch (error) {
+        console.error('Failed to load integration states:', error);
+      }
+    };
+
+    loadIntegrationStates();
+  }, []);
 
   // Integration configurations
-  const splunkConfig: IntegrationConfig = {
-    name: 'Splunk',
-    icon: '🔍',
-    description: 'Monitor logs and trigger alerts via webhook',
-    enabled: false,
-    fields: [
-      {
-        id: 'webhook_token',
-        label: 'Webhook Token',
-        type: 'password',
-        placeholder: 'Enter your webhook token',
-        helpText: 'This token will be used to authenticate webhook requests',
-        copyButton: true,
-        webhookUrl: `${BACKEND_URL}/webhook/splunk`,
-      },
-      {
-        id: 'allowed_searches',
-        label: 'Allowed Searches',
-        type: 'textarea',
-        placeholder: 'Enter allowed search names (one per line)',
-        helpText: 'Only alerts from these saved searches will be processed',
-      },
-    ],
+  const splunkConfig = integrationConfigs.splunk;
+  const datadogConfig = integrationConfigs.datadog;
+  const posthogConfig = integrationConfigs.posthog;
+  const sentryConfig = integrationConfigs.sentry;
+
+  // Handle tab changes with URL persistence
+  const handleTabChange = (tab: 'monitoring' | 'analytics') => {
+    setActiveTab(tab);
+    router.replace(`/settings/integrations?tab=${tab}`, { scroll: false });
   };
 
-  const datadogConfig: IntegrationConfig = {
-    name: 'Datadog',
-    icon: '🐕',
-    description: 'Receive monitor alerts and metrics',
-    enabled: true,
-    fields: [
-      {
-        id: 'webhook_secret',
-        label: 'Webhook Secret (Optional)',
-        type: 'password',
-        placeholder: 'Enter webhook secret for validation',
-        helpText: 'Leave empty to accept all webhook requests',
-      },
-      {
-        id: 'allowed_monitors',
-        label: 'Allowed Monitor IDs',
-        type: 'multiselect',
-        placeholder: 'Comma-separated monitor IDs, or "*" for all',
-        defaultValue: '*',
-        helpText: 'Use "*" to allow all monitors, or specify IDs like "123456,789012"',
-      },
-    ],
+  // Toggle handlers for each integration
+  const handleSplunkToggle = async (enabled: boolean) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/config/splunk/enabled?project_id=default`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error('Failed to update Splunk status');
+
+      setIntegrationConfigs((prev) => ({
+        ...prev,
+        splunk: { ...prev.splunk, enabled },
+      }));
+    } catch (error) {
+      console.error('Failed to toggle Splunk:', error);
+      throw error;
+    }
   };
 
-  const posthogConfig: IntegrationConfig = {
-    name: 'PostHog',
-    icon: '📊',
-    description: 'Track product analytics events',
-    enabled: true,
-    fields: [
-      {
-        id: 'event_types',
-        label: 'Event Types to Track',
-        type: 'checkbox',
-        options: ['$exception', '$error', 'custom_error'],
-        defaultValue: ['$exception', '$error'],
-        helpText: 'Select which event types should trigger feedback creation',
-      },
-    ],
+  const handleDatadogToggle = async (enabled: boolean) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/config/datadog/enabled?project_id=default`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error('Failed to update Datadog status');
+
+      setIntegrationConfigs((prev) => ({
+        ...prev,
+        datadog: { ...prev.datadog, enabled },
+      }));
+    } catch (error) {
+      console.error('Failed to toggle Datadog:', error);
+      throw error;
+    }
   };
 
-  const sentryConfig: IntegrationConfig = {
-    name: 'Sentry',
-    icon: '⚠️',
-    description: 'Capture errors and performance issues',
-    enabled: true,
-    fields: [
-      {
-        id: 'webhook_secret',
-        label: 'Webhook Secret',
-        type: 'password',
-        placeholder: 'Enter your Sentry webhook secret',
-        helpText: 'Found in Sentry project settings → Integrations → Webhooks',
-      },
-      {
-        id: 'environments',
-        label: 'Environments',
-        type: 'checkbox',
-        options: ['production', 'staging', 'development'],
-        defaultValue: ['production'],
-        helpText: 'Only issues from selected environments will be processed',
-      },
-      {
-        id: 'levels',
-        label: 'Severity Levels',
-        type: 'checkbox',
-        options: ['fatal', 'error', 'warning'],
-        defaultValue: ['fatal', 'error'],
-        helpText: 'Minimum severity level to capture',
-      },
-    ],
+  const handlePostHogToggle = async (enabled: boolean) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/config/posthog/enabled?project_id=default`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error('Failed to update PostHog status');
+
+      setIntegrationConfigs((prev) => ({
+        ...prev,
+        posthog: { ...prev.posthog, enabled },
+      }));
+    } catch (error) {
+      console.error('Failed to toggle PostHog:', error);
+      throw error;
+    }
+  };
+
+  const handleSentryToggle = async (enabled: boolean) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/config/sentry/enabled?project_id=default`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error('Failed to update Sentry status');
+
+      setIntegrationConfigs((prev) => ({
+        ...prev,
+        sentry: { ...prev.sentry, enabled },
+      }));
+    } catch (error) {
+      console.error('Failed to toggle Sentry:', error);
+      throw error;
+    }
   };
 
   // Save handlers for each integration
@@ -222,13 +367,13 @@ export default function IntegrationsPage() {
   };
 
   const monitoringIntegrations = [
-    { config: splunkConfig, onSave: handleSplunkSave },
-    { config: datadogConfig, onSave: handleDatadogSave },
+    { config: splunkConfig, onSave: handleSplunkSave, onToggle: handleSplunkToggle },
+    { config: datadogConfig, onSave: handleDatadogSave, onToggle: handleDatadogToggle },
   ];
 
   const analyticsIntegrations = [
-    { config: posthogConfig, onSave: handlePostHogSave },
-    { config: sentryConfig, onSave: handleSentrySave },
+    { config: posthogConfig, onSave: handlePostHogSave, onToggle: handlePostHogToggle },
+    { config: sentryConfig, onSave: handleSentrySave, onToggle: handleSentryToggle },
   ];
 
   return (
@@ -261,7 +406,7 @@ export default function IntegrationsPage() {
           {/* Tab Navigation */}
           <div className="mt-8 flex items-center gap-2 border-b border-white/10 pb-0">
             <button
-              onClick={() => setActiveTab('monitoring')}
+              onClick={() => handleTabChange('monitoring')}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition-all ${
                 activeTab === 'monitoring'
                   ? 'border-emerald-500 text-emerald-300'
@@ -276,7 +421,7 @@ export default function IntegrationsPage() {
               </span>
             </button>
             <button
-              onClick={() => setActiveTab('analytics')}
+              onClick={() => handleTabChange('analytics')}
               className={`px-6 py-3 text-sm font-medium border-b-2 transition-all ${
                 activeTab === 'analytics'
                   ? 'border-emerald-500 text-emerald-300'
@@ -305,6 +450,7 @@ export default function IntegrationsPage() {
                 key={integration.config.name}
                 config={integration.config}
                 onSave={integration.onSave}
+                onToggle={integration.onToggle}
               />
             ))}
 
@@ -314,6 +460,7 @@ export default function IntegrationsPage() {
                 key={integration.config.name}
                 config={integration.config}
                 onSave={integration.onSave}
+                onToggle={integration.onToggle}
               />
             ))}
         </div>

@@ -587,6 +587,105 @@ class InMemoryStore:
         project_config = self.sentry_config.get(pid_str, {})
         return project_config.get(key)
 
+    def set_splunk_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a Splunk configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "webhook_token", "allowed_searches", "enabled").
+            value (Any): Config value to store.
+        """
+        pid_str = str(project_id)
+        if not hasattr(self, "splunk_config"):
+            self.splunk_config = {}
+        if pid_str not in self.splunk_config:
+            self.splunk_config[pid_str] = {}
+        self.splunk_config[pid_str][key] = value
+
+    def get_splunk_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a Splunk configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        if not hasattr(self, "splunk_config"):
+            self.splunk_config = {}
+        pid_str = str(project_id)
+        project_config = self.splunk_config.get(pid_str, {})
+        return project_config.get(key)
+
+    def set_datadog_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a Datadog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "webhook_secret", "monitors", "enabled").
+            value (Any): Config value to store.
+        """
+        pid_str = str(project_id)
+        if not hasattr(self, "datadog_config"):
+            self.datadog_config = {}
+        if pid_str not in self.datadog_config:
+            self.datadog_config[pid_str] = {}
+        self.datadog_config[pid_str][key] = value
+
+    def get_datadog_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a Datadog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        if not hasattr(self, "datadog_config"):
+            self.datadog_config = {}
+        pid_str = str(project_id)
+        project_config = self.datadog_config.get(pid_str, {})
+        return project_config.get(key)
+
+    def set_posthog_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a PostHog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "event_types", "enabled").
+            value (Any): Config value to store.
+        """
+        pid_str = str(project_id)
+        if not hasattr(self, "posthog_config"):
+            self.posthog_config = {}
+        if pid_str not in self.posthog_config:
+            self.posthog_config[pid_str] = {}
+        self.posthog_config[pid_str][key] = value
+
+    def get_posthog_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a PostHog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        if not hasattr(self, "posthog_config"):
+            self.posthog_config = {}
+        pid_str = str(project_id)
+        project_config = self.posthog_config.get(pid_str, {})
+        return project_config.get(key)
+
         self.datadog_webhook_secrets = {}
         self.datadog_monitors = {}
 
@@ -1582,6 +1681,138 @@ class RedisStore:
             Optional[Any]: Config value if it exists, None otherwise.
         """
         redis_key = self._sentry_config_key(project_id, key)
+        raw = self._get(redis_key)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    # Config (Splunk)
+    @staticmethod
+    def _splunk_config_key(project_id: ProjectId, key: str) -> str:
+        """
+        Construct Redis key for Splunk configuration.
+
+        Returns:
+            str: Redis key in the form "config:splunk:{project_id}:{key}".
+        """
+        return f"config:splunk:{project_id}:{key}"
+
+    def set_splunk_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a Splunk configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "webhook_token", "allowed_searches", "enabled").
+            value (Any): Config value to store (will be JSON-encoded).
+        """
+        redis_key = self._splunk_config_key(project_id, key)
+        payload = json.dumps(value)
+        self._set(redis_key, payload)
+
+    def get_splunk_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a Splunk configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        redis_key = self._splunk_config_key(project_id, key)
+        raw = self._get(redis_key)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    # Config (Datadog)
+    @staticmethod
+    def _datadog_config_key(project_id: ProjectId, key: str) -> str:
+        """
+        Construct Redis key for Datadog configuration.
+
+        Returns:
+            str: Redis key in the form "config:datadog:{project_id}:{key}".
+        """
+        return f"config:datadog:{project_id}:{key}"
+
+    def set_datadog_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a Datadog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "webhook_secret", "monitors", "enabled").
+            value (Any): Config value to store (will be JSON-encoded).
+        """
+        redis_key = self._datadog_config_key(project_id, key)
+        payload = json.dumps(value)
+        self._set(redis_key, payload)
+
+    def get_datadog_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a Datadog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        redis_key = self._datadog_config_key(project_id, key)
+        raw = self._get(redis_key)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
+    # Config (PostHog)
+    @staticmethod
+    def _posthog_config_key(project_id: ProjectId, key: str) -> str:
+        """
+        Construct Redis key for PostHog configuration.
+
+        Returns:
+            str: Redis key in the form "config:posthog:{project_id}:{key}".
+        """
+        return f"config:posthog:{project_id}:{key}"
+
+    def set_posthog_config(self, project_id: ProjectId, key: str, value: Any) -> None:
+        """
+        Set a PostHog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key (e.g., "event_types", "enabled").
+            value (Any): Config value to store (will be JSON-encoded).
+        """
+        redis_key = self._posthog_config_key(project_id, key)
+        payload = json.dumps(value)
+        self._set(redis_key, payload)
+
+    def get_posthog_config(self, project_id: ProjectId, key: str) -> Optional[Any]:
+        """
+        Get a PostHog configuration value for a project.
+
+        Parameters:
+            project_id (ProjectId): Project identifier.
+            key (str): Config key to retrieve.
+
+        Returns:
+            Optional[Any]: Config value if it exists, None otherwise.
+        """
+        redis_key = self._posthog_config_key(project_id, key)
         raw = self._get(redis_key)
         if not raw:
             return None
@@ -2687,6 +2918,85 @@ def get_sentry_config(project_id: ProjectId, key: str) -> Optional[Any]:
         Optional[Any]: Config value if it exists, None otherwise.
     """
     return _STORE.get_sentry_config(project_id, key)
+
+
+def set_splunk_config(project_id: ProjectId, key: str, value: Any) -> None:
+    """
+    Set a Splunk configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key (e.g., "webhook_token", "allowed_searches", "enabled").
+        value (Any): Config value to store.
+    """
+    return _STORE.set_splunk_config(project_id, key, value)
+
+
+def get_splunk_config(project_id: ProjectId, key: str) -> Optional[Any]:
+    """
+    Get a Splunk configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key to retrieve.
+
+    Returns:
+        Optional[Any]: Config value if it exists, None otherwise.
+    """
+    return _STORE.get_splunk_config(project_id, key)
+
+
+def set_datadog_config(project_id: ProjectId, key: str, value: Any) -> None:
+    """
+    Set a Datadog configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key (e.g., "webhook_secret", "monitors", "enabled").
+        value (Any): Config value to store.
+    """
+    return _STORE.set_datadog_config(project_id, key, value)
+
+
+def get_datadog_config(project_id: ProjectId, key: str) -> Optional[Any]:
+    """
+    Get a Datadog configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key to retrieve.
+
+    Returns:
+        Optional[Any]: Config value if it exists, None otherwise.
+    """
+    return _STORE.get_datadog_config(project_id, key)
+
+
+def set_posthog_config(project_id: ProjectId, key: str, value: Any) -> None:
+    """
+    Set a PostHog configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key (e.g., "event_types", "enabled").
+        value (Any): Config value to store.
+    """
+    return _STORE.set_posthog_config(project_id, key, value)
+
+
+def get_posthog_config(project_id: ProjectId, key: str) -> Optional[Any]:
+    """
+    Get a PostHog configuration value for a project.
+
+    Parameters:
+        project_id (ProjectId): Project identifier.
+        key (str): Config key to retrieve.
+
+    Returns:
+        Optional[Any]: Config value if it exists, None otherwise.
+    """
+    return _STORE.get_posthog_config(project_id, key)
+
 
 def set_datadog_webhook_secret_for_project(secret: str, project_id: ProjectId) -> str:
     """

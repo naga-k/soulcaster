@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export interface IntegrationConfig {
   name: string;
@@ -20,14 +20,17 @@ export interface IntegrationField {
   helpText?: string;
   copyButton?: boolean;
   webhookUrl?: string;
+  required?: boolean;
+  readOnly?: boolean;
 }
 
-interface IntegrationCardProps {
+export interface IntegrationCardProps {
   config: IntegrationConfig;
   onSave: (data: Record<string, any>) => Promise<void>;
+  onToggle?: (enabled: boolean) => Promise<void>;
 }
 
-export default function IntegrationCard({ config, onSave }: IntegrationCardProps) {
+export default function IntegrationCard({ config, onSave, onToggle }: IntegrationCardProps) {
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
     config.fields.forEach((field) => {
@@ -40,10 +43,17 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
     return initial;
   });
 
+  const [enabled, setEnabled] = useState(config.enabled ?? true);
+  const [toggleLoading, setToggleLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
+
+  // Sync enabled state when config.enabled changes
+  useEffect(() => {
+    setEnabled(config.enabled ?? true);
+  }, [config.enabled]);
 
   const handleCheckboxChange = (fieldId: string, value: string, checked: boolean) => {
     setFormData((prev) => {
@@ -54,6 +64,22 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
         return { ...prev, [fieldId]: current.filter((v: string) => v !== value) };
       }
     });
+  };
+
+  const handleToggle = async () => {
+    if (!onToggle) return;
+
+    const newEnabledState = !enabled;
+    setToggleLoading(true);
+
+    try {
+      await onToggle(newEnabledState);
+      setEnabled(newEnabledState);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Failed to toggle integration' });
+    } finally {
+      setToggleLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,6 +96,16 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
       setLoading(false);
     }
   };
+
+  // Auto-dismiss success messages after 3 seconds
+  useEffect(() => {
+    if (message?.type === 'success') {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const copyToClipboard = async (text: string, fieldId: string) => {
     try {
@@ -100,23 +136,32 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
           </div>
         </div>
 
-        {/* Enable/Disable Toggle (visual only) */}
+        {/* Enable/Disable Toggle */}
         <button
           type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={`Enable/disable ${config.name} integration`}
+          disabled={toggleLoading}
           className={`relative w-11 h-6 rounded-full transition-all ${
-            config.enabled
+            enabled
               ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
               : 'bg-white/10'
-          }`}
-          onClick={() => {
-            // TODO: Implement enable/disable logic
-          }}
+          } ${toggleLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          onClick={handleToggle}
         >
           <div
-            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-              config.enabled ? 'translate-x-5' : 'translate-x-0'
+            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform flex items-center justify-center ${
+              enabled ? 'translate-x-5' : 'translate-x-0'
             }`}
-          />
+          >
+            {toggleLoading && (
+              <svg className="animate-spin h-3 w-3 text-slate-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
+          </div>
         </button>
       </div>
 
@@ -124,23 +169,51 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
       <form onSubmit={handleSubmit} className="relative z-10 space-y-4">
         {config.fields.map((field) => (
           <div key={field.id} className="space-y-2">
-            <label className="block text-sm font-medium text-slate-200">
+            <label htmlFor={field.id} className="block text-sm font-medium text-slate-200">
               {field.label}
+              {field.required && <span className="text-rose-400 ml-1">*</span>}
             </label>
 
             {field.type === 'text' && (
-              <input
-                type="text"
-                value={formData[field.id] || ''}
-                onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                placeholder={field.placeholder}
-                className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-              />
+              <div className="relative">
+                <input
+                  id={field.id}
+                  type="text"
+                  value={formData[field.id] || field.placeholder || ''}
+                  onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                  placeholder={field.placeholder}
+                  readOnly={field.readOnly}
+                  className={`w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all ${
+                    field.readOnly ? 'cursor-default font-mono text-sm pr-12' : ''
+                  }`}
+                />
+                {field.copyButton && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(formData[field.id] || field.placeholder || '', field.id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-emerald-300 transition-colors"
+                    aria-label="Copy to clipboard"
+                    title="Copy to clipboard"
+                  >
+                    {copied === field.id ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
             )}
 
             {field.type === 'password' && (
               <div className="relative">
                 <input
+                  id={field.id}
                   type={showPassword[field.id] ? 'text' : 'password'}
                   value={formData[field.id] || ''}
                   onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
@@ -152,6 +225,7 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
                     type="button"
                     onClick={() => setShowPassword({ ...showPassword, [field.id]: !showPassword[field.id] })}
                     className="p-1.5 text-slate-400 hover:text-emerald-300 transition-colors"
+                    aria-label={showPassword[field.id] ? 'Hide password' : 'Show password'}
                   >
                     {showPassword[field.id] ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -170,6 +244,7 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
                       type="button"
                       onClick={() => copyToClipboard(field.webhookUrl!, field.id)}
                       className="p-1.5 text-slate-400 hover:text-emerald-300 transition-colors"
+                      aria-label="Copy webhook URL"
                       title="Copy webhook URL"
                     >
                       {copied === field.id ? (
@@ -190,6 +265,7 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
 
             {field.type === 'textarea' && (
               <textarea
+                id={field.id}
                 value={formData[field.id] || ''}
                 onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                 placeholder={field.placeholder}
@@ -218,6 +294,7 @@ export default function IntegrationCard({ config, onSave }: IntegrationCardProps
 
             {field.type === 'multiselect' && (
               <input
+                id={field.id}
                 type="text"
                 value={formData[field.id] || ''}
                 onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}

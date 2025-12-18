@@ -979,7 +979,7 @@ def get_splunk_config(project_id: Optional[str] = Query(None)):
     """
     Get the Splunk configuration for a project.
 
-    Returns the webhook token and allowed searches list.
+    Returns the webhook token, allowed searches list, and enabled state.
 
     Parameters:
         project_id (str): Project identifier.
@@ -988,18 +988,24 @@ def get_splunk_config(project_id: Optional[str] = Query(None)):
         dict: {
             "webhook_token": str or None,
             "allowed_searches": List[str] or None,
+            "enabled": bool (default True),
             "project_id": str
         }
     """
     from splunk_client import get_splunk_webhook_token, get_splunk_allowed_searches
+    from store import get_splunk_config
 
     pid = _require_project_id(project_id)
     token = get_splunk_webhook_token(pid)
     searches = get_splunk_allowed_searches(pid)
+    enabled = get_splunk_config(pid, "enabled")
+    if enabled is None:
+        enabled = True  # Default to enabled
 
     return {
         "webhook_token": token,
         "allowed_searches": searches,
+        "enabled": enabled,
         "project_id": str(pid)
     }
 
@@ -1063,7 +1069,7 @@ def get_datadog_config(project_id: Optional[str] = Query(None)):
     """
     Get the Datadog configuration for a project.
 
-    Returns the webhook secret and allowed monitors list.
+    Returns the webhook secret, allowed monitors list, and enabled state.
 
     Parameters:
         project_id (str): Project identifier.
@@ -1072,16 +1078,23 @@ def get_datadog_config(project_id: Optional[str] = Query(None)):
         dict: {
             "webhook_secret": str or None,
             "allowed_monitors": List[str] or None,
+            "enabled": bool (default True),
             "project_id": str
         }
     """
+    from store import get_datadog_config as get_dd_config
+
     pid = _require_project_id(project_id)
     secret = get_datadog_webhook_secret_for_project(pid)
     monitors = get_datadog_monitors_for_project(pid)
+    enabled = get_dd_config(pid, "enabled")
+    if enabled is None:
+        enabled = True  # Default to enabled
 
     return {
         "webhook_secret": secret,
         "allowed_monitors": monitors,
+        "enabled": enabled,
         "project_id": str(pid)
     }
 
@@ -1136,7 +1149,7 @@ def get_posthog_config(project_id: Optional[str] = Query(None)):
     """
     Get the PostHog configuration for a project.
 
-    Returns the event types to track.
+    Returns the event types to track and enabled state.
 
     Parameters:
         project_id (str): Project identifier.
@@ -1144,16 +1157,22 @@ def get_posthog_config(project_id: Optional[str] = Query(None)):
     Returns:
         dict: {
             "event_types": List[str] or None,
+            "enabled": bool (default True),
             "project_id": str
         }
     """
     from posthog_client import get_posthog_event_types
+    from store import get_posthog_config as get_ph_config
 
     pid = _require_project_id(project_id)
     event_types = get_posthog_event_types(pid)
+    enabled = get_ph_config(pid, "enabled")
+    if enabled is None:
+        enabled = True  # Default to enabled
 
     return {
         "event_types": event_types,
+        "enabled": enabled,
         "project_id": str(pid)
     }
 
@@ -1197,12 +1216,17 @@ class SentryLevelsConfig(BaseModel):
     levels: List[str]
 
 
+class IntegrationEnabledConfig(BaseModel):
+    """Payload for configuring integration enabled state."""
+    enabled: bool
+
+
 @app.get("/config/sentry")
 def get_sentry_config_endpoint(project_id: Optional[str] = Query(None)):
     """
     Get the Sentry configuration for a project.
 
-    Returns the webhook secret, allowed environments, and allowed levels.
+    Returns the webhook secret, allowed environments, allowed levels, and enabled state.
 
     Parameters:
         project_id (str): Project identifier.
@@ -1212,6 +1236,7 @@ def get_sentry_config_endpoint(project_id: Optional[str] = Query(None)):
             "webhook_secret": str or None,
             "allowed_environments": List[str] or None,
             "allowed_levels": List[str] or None,
+            "enabled": bool (default True),
             "project_id": str
         }
     """
@@ -1221,11 +1246,15 @@ def get_sentry_config_endpoint(project_id: Optional[str] = Query(None)):
     secret = get_sentry_config(pid, "webhook_secret")
     environments = get_sentry_config(pid, "environments")
     levels = get_sentry_config(pid, "levels")
+    enabled = get_sentry_config(pid, "enabled")
+    if enabled is None:
+        enabled = True  # Default to enabled
 
     return {
         "webhook_secret": secret,
         "allowed_environments": environments,
         "allowed_levels": levels,
+        "enabled": enabled,
         "project_id": str(pid)
     }
 
@@ -1286,6 +1315,62 @@ def set_sentry_levels(payload: SentryLevelsConfig, project_id: Optional[str] = Q
 
     pid = _require_project_id(project_id)
     set_sentry_config(pid, "levels", payload.levels)
+
+    return {"status": "ok"}
+
+
+# ============================================================
+# GENERIC INTEGRATION ENABLED STATE ENDPOINT
+# ============================================================
+
+@app.post("/config/{integration}/enabled")
+def set_integration_enabled(
+    integration: str,
+    payload: IntegrationEnabledConfig,
+    project_id: Optional[str] = Query(None)
+):
+    """
+    Set the enabled state for any integration.
+
+    Supports: splunk, datadog, posthog, sentry
+
+    Parameters:
+        integration (str): Integration name (splunk, datadog, posthog, sentry).
+        payload (IntegrationEnabledConfig): Object containing the enabled boolean.
+        project_id (str): Project identifier.
+
+    Returns:
+        dict: {"status": "ok"}
+
+    Raises:
+        HTTPException: 400 if integration is not supported.
+    """
+    from store import (
+        set_sentry_config,
+        set_splunk_config,
+        set_datadog_config,
+        set_posthog_config
+    )
+
+    pid = _require_project_id(project_id)
+
+    # Validate integration name
+    valid_integrations = ["splunk", "datadog", "posthog", "sentry"]
+    if integration not in valid_integrations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid integration: {integration}. Must be one of {valid_integrations}"
+        )
+
+    # Route to appropriate config function
+    if integration == "splunk":
+        set_splunk_config(pid, "enabled", payload.enabled)
+    elif integration == "datadog":
+        set_datadog_config(pid, "enabled", payload.enabled)
+    elif integration == "posthog":
+        set_posthog_config(pid, "enabled", payload.enabled)
+    elif integration == "sentry":
+        set_sentry_config(pid, "enabled", payload.enabled)
 
     return {"status": "ok"}
 

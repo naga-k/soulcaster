@@ -349,3 +349,173 @@ def test_set_sentry_allowed_levels_requires_project_id():
     )
 
     assert response.status_code == 400
+
+
+# ============================================================
+# INTEGRATION ENABLED STATE TESTS
+# ============================================================
+
+def test_get_splunk_config_includes_enabled_default_true(project_context):
+    """GET /config/splunk should include enabled=True by default."""
+    pid = project_context["project_id"]
+
+    response = client.get(f"/config/splunk?project_id={pid}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+
+
+def test_set_splunk_enabled_state(project_context):
+    """POST /config/splunk/enabled should set the enabled state."""
+    pid = project_context["project_id"]
+
+    # Disable Splunk
+    response = client.post(
+        f"/config/splunk/enabled?project_id={pid}",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # Verify it was stored
+    get_response = client.get(f"/config/splunk?project_id={pid}")
+    assert get_response.json()["enabled"] is False
+
+    # Enable Splunk
+    response = client.post(
+        f"/config/splunk/enabled?project_id={pid}",
+        json={"enabled": True}
+    )
+
+    assert response.status_code == 200
+    get_response = client.get(f"/config/splunk?project_id={pid}")
+    assert get_response.json()["enabled"] is True
+
+
+def test_set_splunk_enabled_requires_project_id():
+    """POST /config/splunk/enabled should return 400 if project_id is missing."""
+    response = client.post(
+        "/config/splunk/enabled",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_datadog_config_includes_enabled_default_true(project_context):
+    """GET /config/datadog should include enabled=True by default."""
+    pid = project_context["project_id"]
+
+    response = client.get(f"/config/datadog?project_id={pid}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+
+
+def test_set_datadog_enabled_state(project_context):
+    """POST /config/datadog/enabled should set the enabled state."""
+    pid = project_context["project_id"]
+
+    # Disable Datadog
+    response = client.post(
+        f"/config/datadog/enabled?project_id={pid}",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # Verify it was stored
+    get_response = client.get(f"/config/datadog?project_id={pid}")
+    assert get_response.json()["enabled"] is False
+
+
+def test_set_datadog_enabled_requires_project_id():
+    """POST /config/datadog/enabled should return 400 if project_id is missing."""
+    response = client.post(
+        "/config/datadog/enabled",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_posthog_config_includes_enabled_default_true(project_context):
+    """GET /config/posthog should include enabled=True by default."""
+    pid = project_context["project_id"]
+
+    response = client.get(f"/config/posthog?project_id={pid}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+
+
+def test_set_posthog_enabled_state(project_context):
+    """POST /config/posthog/enabled should set the enabled state."""
+    pid = project_context["project_id"]
+
+    # Disable PostHog
+    response = client.post(
+        f"/config/posthog/enabled?project_id={pid}",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # Verify it was stored
+    get_response = client.get(f"/config/posthog?project_id={pid}")
+    assert get_response.json()["enabled"] is False
+
+
+def test_set_posthog_enabled_requires_project_id():
+    """POST /config/posthog/enabled should return 400 if project_id is missing."""
+    response = client.post(
+        "/config/posthog/enabled",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_sentry_config_includes_enabled_default_true(project_context):
+    """GET /config/sentry should include enabled=True by default."""
+    pid = project_context["project_id"]
+
+    response = client.get(f"/config/sentry?project_id={pid}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["enabled"] is True
+
+
+def test_set_sentry_enabled_state(project_context):
+    """POST /config/sentry/enabled should set the enabled state."""
+    pid = project_context["project_id"]
+
+    # Disable Sentry
+    response = client.post(
+        f"/config/sentry/enabled?project_id={pid}",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    # Verify it was stored
+    get_response = client.get(f"/config/sentry?project_id={pid}")
+    assert get_response.json()["enabled"] is False
+
+
+def test_set_sentry_enabled_requires_project_id():
+    """POST /config/sentry/enabled should return 400 if project_id is missing."""
+    response = client.post(
+        "/config/sentry/enabled",
+        json={"enabled": False}
+    )
+
+    assert response.status_code == 400
