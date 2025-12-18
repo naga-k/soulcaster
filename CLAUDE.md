@@ -4,258 +4,184 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**FeedbackAgent** is a self-healing dev loop MVP built for a 24-hour hackathon. The system ingests bug reports from Reddit and GitHub issues, uses LLM-based triage to cluster feedback into issues, and automatically generates code fixes via a coding agent that opens GitHub PRs.
+**Soulcaster** is a feedback triage and automated fix generation system. It ingests bug reports from Reddit, Sentry, and GitHub issues, clusters similar feedback using embeddings, and can trigger a coding agent to generate fixes and open PRs.
 
-**Flow**: Reddit/GitHub → Clustered Issues → Human triage dashboard → One-Click Fix → GitHub PR
+**Flow**: Reddit/Sentry/GitHub → Clustered Issues → Dashboard Triage → Coding Agent → GitHub PR
 
 ## Architecture
 
-### Three-Layer System ("Ears, Brain, Hands")
+Three components that share an Upstash Redis store:
 
-1. **The Ears (Ingestion Layer)**
-   - Python service with Reddit poller (PRAW) and GitHub API integration
-   - Normalizes feedback into `FeedbackItem` schema
-   - In-memory storage (Python dicts) for MVP - no database
-
-2. **The Brain (Triage + Coding Agents)**
-   - Triage: Embedding-based clustering with cosine similarity (threshold: 0.8-0.85)
-   - LLM generates cluster summaries
-   - Coding Agent: Selects candidate files, generates patches, opens PRs
-
-3. **The Hands (Execution)**
-   - PyGithub integration for branch creation, commits, and PR opening
-   - Syntax validation for Python files only (MVP scope)
+1. **Backend** (`/backend`) - FastAPI service for ingestion and clustering
+2. **Dashboard** (`/dashboard`) - Next.js web UI for triage and management
+3. **Coding Agent** (`/coding-agent`) - Standalone script that fixes issues via Kilo CLI
 
 ### Tech Stack
 
-**Backend (Python)**
-- Currently not implemented
-- Planned: FastAPI for HTTP server, PRAW for Reddit polling, PyGithub for GitHub integration
-
-**Frontend (Next.js) - IMPLEMENTED**
-- Next.js 16 App Router with TypeScript
-- Upstash Redis for data persistence
-- Tailwind CSS for styling
-- `@xenova/transformers` for client-side embeddings (Xenova/all-MiniLM-L6-v2 model)
-- Auto-clustering on page load when unclustered items exist
-- Reddit ingestion UI for manual feedback submission
-- Working directory: `/Users/sam/code/soulcaster/dashboard`
-
-**Redis Data Model**:
-- `feedback:{id}` - Hash with feedback details and `clustered: "true"|"false"`
-- `feedback:unclustered` - Set of unclustered feedback IDs
-- `feedback:created` - Sorted set of all feedback IDs by timestamp
-- `cluster:{id}` - Hash with cluster metadata (title, summary, status, centroid)
-- `cluster:items:{id}` - Set of feedback IDs in this cluster
-- `clusters:all` - Set of all cluster IDs
-- `reddit:subreddits` - Set of monitored subreddit names
-
-**LLM Strategy**
-- Fast/cheap model (e.g., Gemini Flash) for embeddings & summaries
-- Stronger model (e.g., Claude Sonnet) for code generation
-- Frontend uses Xenova transformers for local embedding generation
+- **Backend**: FastAPI, Pydantic, redis-py or Upstash REST
+- **Dashboard**: Next.js 16 (App Router), TypeScript, Tailwind, `@google/genai` for embeddings
+- **Storage**: Upstash Redis (or local Redis) + Upstash Vector for embeddings
+- **Embeddings**: Gemini (`gemini-embedding-001`) for server-side clustering
+- **Vector DB**: Upstash Vector for efficient similarity search (ANN)
+- **LLM Summaries**: Gemini (`gemini-2.5-flash`) for cluster summaries
 
 ## Development Commands
 
-### Backend (Python/FastAPI)
-
-Currently not implemented. When implementing:
+### Backend (from project root)
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt  # or poetry install
+pip install -r backend/requirements.txt
 
-# Run FastAPI server
-uvicorn app.main:app --reload
+# Run API server
+uvicorn backend.main:app --reload --port 8000
 
 # Run Reddit poller (separate process)
-python scripts/reddit_poller.py
+python -m backend.reddit_poller
 
-# Run tests (TDD approach per PRD)
-pytest
+# Run all tests
+pytest backend/tests -v
 
 # Run single test file
-pytest tests/test_clustering.py -v
+pytest backend/tests/test_clusters.py -v
+
+# Run specific test
+pytest backend/tests/test_clusters.py::test_list_clusters -v
 ```
 
-### Frontend (Next.js)
-
-Working directory: `/Users/sam/code/soulcaster/dashboard`
+### Dashboard (from `/dashboard`)
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Run production build
-npm start
-
-# Lint and format
-npm run lint
-npm run format
-npm run format:check
-
-# Type checking
-npm run type-check
+npm run dev          # Development server (port 3000)
+npm run build        # Production build
+npm run lint         # ESLint
+npm run format       # Prettier
+npm run type-check   # TypeScript check
+npm test             # Jest tests
+npm run test:watch   # Jest watch mode
 ```
 
-**Note**: If dev server has memory issues, clean build cache:
+### Coding Agent
+
 ```bash
-pkill -f "next dev" && rm -rf .next && npm run dev
+python coding-agent/fix_issue.py <github-issue-url> --job-id <optional-job-id>
 ```
 
-## Key Data Models
+Requires: `GH_TOKEN`, `GIT_USER_EMAIL`, `GIT_USER_NAME`, and either `GEMINI_API_KEY` or `MINIMAX_API_KEY`.
 
-### FeedbackItem
-- `id`: UUID
-- `source`: "reddit" | "github" | "manual"
-- `external_id`: Original source ID
-- `title`: Post title or truncated comment
-- `body`: Full text content
-- `metadata`: JSON (subreddit, permalink, etc.)
-- `created_at`: Timestamp
-- `embedding`: Vector representation
+## Key Files
 
-### IssueCluster
-- `id`: UUID
-- `title`: LLM-generated (≤80 chars)
-- `summary`: LLM-generated (≤300 chars)
-- `feedback_ids`: List of associated FeedbackItem IDs
-- `status`: "new" | "fixing" | "pr_opened" | "failed"
-- `created_at`, `updated_at`: Timestamps
-- `embedding_centroid`: Mean of member embeddings
-- `github_branch`: Optional branch name
-- `github_pr_url`: Optional PR URL
-- `error_message`: Optional failure details
+**Backend**:
+- `backend/main.py` - FastAPI routes (`/ingest/*`, `/clusters`, `/feedback`, `/jobs`)
+- `backend/store.py` - Redis/in-memory storage abstraction
+- `backend/models.py` - Pydantic models (`FeedbackItem`, `IssueCluster`, `AgentJob`)
+- `backend/reddit_poller.py` - Reddit ingestion via requests
 
-## API Endpoints
+**Dashboard**:
+- `dashboard/lib/clustering.ts` - Legacy centroid-based clustering logic
+- `dashboard/lib/vector.ts` - **Vector DB-based clustering** (recommended)
+- `dashboard/lib/redis.ts` - Upstash Redis client helpers
+- `dashboard/app/api/clusters/run/route.ts` - Legacy clustering endpoint
+- `dashboard/app/api/clusters/run-vector/route.ts` - **Vector-based clustering endpoint** (recommended)
+- `dashboard/app/clusters/page.tsx` - Cluster list UI
 
-### Backend (Python/FastAPI) - NOT IMPLEMENTED
-- Planned: `POST /ingest/reddit`
-- Planned: `GET /clusters`, `GET /clusters/{id}`, `POST /clusters/{id}/start_fix`
+## Redis Data Model
 
-### Frontend API Routes (Next.js) - IMPLEMENTED
-- `GET /api/clusters` - List all clusters from Redis
-- `GET /api/clusters/unclustered` - Count unclustered feedback items
-- `POST /api/clusters/run` - Run clustering algorithm on unclustered items
-- `POST /api/clusters/reset` - Reset all clustering data (for debugging)
-- `POST /api/feedback/ingest` - Ingest feedback from Reddit or manual submission
-- `GET /api/config/reddit/subreddits` - Get monitored subreddits list
-- `POST /api/config/reddit/subreddits` - Update monitored subreddits list
+```
+feedback:{id}        - Hash: id, source, title, body, metadata, created_at, clustered
+feedback:created     - Sorted set: all feedback IDs by timestamp
+feedback:unclustered - Set: IDs pending clustering
+cluster:{id}         - Hash: id, title, summary, status, centroid, issue_title, etc.
+cluster:items:{id}   - Set: feedback IDs in cluster
+clusters:all         - Set: all cluster IDs
+job:{id}             - Hash: id, cluster_id, status, logs, created_at
+```
 
-## Critical Implementation Details
+## Clustering
 
-### Clustering Logic (IMPLEMENTED)
-**Location**: `lib/clustering.ts` and `app/api/clusters/run/route.ts`
+### Vector-Based Clustering (Recommended)
 
-1. Generate embeddings for all unclustered feedback (`title + body`)
-2. For each feedback item, compare to all cluster centroids using cosine similarity
-3. If similarity ≥ threshold: add to existing cluster and recalculate centroid
-4. Else: create new cluster with this single feedback item
-5. Generate/update cluster summary using simple heuristics (first title + body snippets)
+See `docs/DESIGN_DECISIONS.md` for full rationale on threshold and architecture choices.
 
-**Similarity Threshold**: Configured in `app/api/clusters/run/route.ts:72`
-- Default: `0.65` (65% similarity)
-- Higher values (e.g., 0.8) = stricter matching, more clusters
-- Lower values (e.g., 0.5) = aggressive grouping, fewer clusters
+**Algorithm** (`lib/vector.ts`):
+1. Generate embedding via Gemini API for `title + body`
+2. Query Upstash Vector for similar feedback items (top-K ANN search)
+3. If top match ≥ 0.72 threshold AND already clustered → join that cluster
+4. If top matches ≥ 0.72 but unclustered → create new cluster with all similar items
+5. If no matches above threshold → create new single-item cluster
+6. Store embedding in Vector DB with cluster assignment metadata
+7. Calculate cluster cohesion score (tight/moderate/loose)
+8. Generate LLM summary for new/changed clusters
 
-**Auto-Clustering**: Runs automatically on page load if unclustered items exist (silent mode)
-- Implementation: `app/clusters/page.tsx:28-39`
+**Key exports** (`lib/vector.ts`):
+- `VectorStore` - Upstash Vector client wrapper
+- `clusterWithVectorDB()` - Single item clustering
+- `processNewFeedbackWithVector()` - Full flow: embed → cluster → store
+- `generateFeedbackEmbedding()` - Gemini embedding generation
 
-**Debugging**: Use `POST /api/clusters/reset` to clear all clusters and re-run from scratch
+### Legacy Centroid-Based Clustering
 
-### Candidate File Selection (Coding Agent)
-1. **From text**: Extract keywords from cluster title, match file paths (case-insensitive)
-2. **Limit**: Max 3-5 files, max 10k chars per file
-3. **Fallback**: Send truncated file list to LLM for selection
+**Algorithm** (`lib/clustering.ts`):
+1. Generate embeddings via Gemini API for `title + body`
+2. Compare each embedding to existing cluster centroids using cosine similarity
+3. If similarity ≥ 0.65: add to cluster, update centroid incrementally
+4. Else: create new cluster
+5. Generate LLM summary for changed clusters only
 
-### Patch Generation
-- Prompt includes: cluster summary, feedback snippets, candidate file contents
-- LLM returns JSON: `{files: [{path, updated_content}], summary}`
-- Full-file replacement (no diff parsing in MVP)
-- Python syntax check via `ast.parse()` before creating PR
-
-### PR Creation Flow
-1. Branch name: `feedbackagent/cluster-{id}-{slugified-title}`
-2. For each file: fetch current SHA, update/create file on new branch
-3. PR title: `Fix: {cluster.title}`
-4. PR body includes: LLM summary, cluster summary, feedback source links, auto-generation notice
-5. Update cluster: `status="pr_opened"`, set `github_branch` and `github_pr_url`
+**Key classes**:
+- `ClusteringBatch` - Optimized batch processing with change tracking
+- `cosineSimilarity()`, `calculateCentroid()`, `findBestCluster()` - Pure functions
 
 ## Environment Variables
 
-**Required for Dashboard** (create `.env.local` in `/dashboard`):
-
+**Backend** (`.env` in project root):
 ```bash
-# Upstash Redis (required)
-UPSTASH_REDIS_REST_URL=https://your-instance.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token-here
-
-# Reddit API (optional - for automated polling)
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-REDDIT_USER_AGENT=
-
-# GitHub (not yet implemented)
-GITHUB_TOKEN=  # Personal access token with repo scope
-GITHUB_REPO=  # Format: "owner/repo"
-BASE_BRANCH=main  # Target branch for PRs
-
-# LLM Provider(s) (not yet implemented)
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+REDDIT_SUBREDDITS=claudeai,programming  # optional
 ```
 
-## Scope Guardrails (MVP Only)
+**Dashboard** (`.env.local` in `/dashboard`):
+```bash
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+UPSTASH_VECTOR_REST_URL=   # For vector-based clustering
+UPSTASH_VECTOR_REST_TOKEN= # Get from Upstash console
+GEMINI_API_KEY=  # or GOOGLE_GENERATIVE_AI_API_KEY
+GITHUB_ID=       # GitHub OAuth (optional)
+GITHUB_SECRET=
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=
+BACKEND_URL=http://localhost:8000
+```
 
-**What we HAVE built (Dashboard):**
-- ✅ Reddit feedback ingestion (manual submission via UI)
-- ✅ Feedback list view with source filtering
-- ✅ Embedding-based clustering with auto-run
-- ✅ Cluster list and detail views
-- ✅ Upstash Redis persistence
-- ✅ Reddit subreddit configuration UI
+**Coding Agent**:
+```bash
+GH_TOKEN=
+GIT_USER_EMAIL=
+GIT_USER_NAME=
+GEMINI_API_KEY=  # or MINIMAX_API_KEY
+BACKEND_URL=     # for job status updates
+```
 
-**What we are NOT building:**
-- No auth/permissions (hardcoded env vars only)
-- No multi-repo support
-- No automated Reddit polling (manual submission only)
-- No coding agent / PR generation
-- No robust retries/rate limiting
-- No chat UI (click-to-fix only)
-- No comprehensive test suite (manual verification)
+## API Endpoints
 
-## Known Limitations (Dashboard)
+**Backend** (`:8000`):
+- `POST /ingest/reddit` - Ingest Reddit feedback
+- `POST /ingest/sentry` - Ingest Sentry webhook
+- `POST /ingest/manual` - Manual text submission
+- `GET /feedback` - List feedback (supports `?source=`, `?limit=`, `?offset=`)
+- `GET /clusters` - List all clusters
+- `GET /clusters/{id}` - Cluster detail with feedback items
+- `POST /clusters/{id}/start_fix` - Mark cluster as "fixing"
+- `POST /admin/trigger-poll` - Manually trigger Reddit poll
+- `GET/POST /config/reddit/subreddits` - Manage monitored subreddits
+- `POST /jobs` - Create agent job
+- `PATCH /jobs/{id}` - Update job status/logs
 
-- Client-side embedding generation (loads Xenova model in browser)
-- Simple heuristic summaries (no LLM summarization)
-- Full-feedback clustering on each run (no incremental updates)
-- No cluster merge/split UI
-- No automatic PR merge or cluster closure
-- Manual feedback submission only (no automated polling)
-
-## Testing Strategy
-
-Currently: Manual verification only
-
-Future: Write tests for:
-- Clustering logic (similarity thresholds, centroid updates)
-- FeedbackItem normalization
-- Redis data integrity
-- API endpoint responses
-
-## Post-Hackathon Future Work
-
-**DO NOT implement these during MVP:**
-- Automated Reddit polling with PRAW
-- Coding agent with PR generation (PyGithub)
-- LLM-based cluster summarization
-- Incremental clustering (only process new items)
-- Cluster merge/split UI controls
-- GitHub OAuth and multi-repo support
-- Comprehensive observability and rate limiting
+**Dashboard** (`:3000/api`):
+- `POST /api/clusters/run` - Run legacy centroid-based clustering
+- `POST /api/clusters/run-vector` - **Run vector-based clustering** (recommended, 0.82 threshold)
+- `POST /api/clusters/cleanup` - Merge duplicate clusters by centroid similarity
+- `POST /api/clusters/reset` - Clear all clusters (debugging)
+- `POST /api/trigger-agent` - Trigger coding agent via ECS
