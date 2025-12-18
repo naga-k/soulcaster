@@ -86,7 +86,7 @@ class FeedbackItem(BaseModel):
 
     id: UUID
     project_id: Union[str, UUID]  # Supports both UUID and CUID formats
-    source: Literal["reddit", "sentry", "manual", "github"]
+    source: Literal["reddit", "sentry", "manual", "github", "datadog"]
     external_id: Optional[str] = None
     title: str
     body: str
