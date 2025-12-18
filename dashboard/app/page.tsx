@@ -70,55 +70,6 @@ export default function Home() {
               <p className="text-white/70 leading-relaxed">
                 Automatically ingests feedback from Reddit communities and GitHub issues in real-time.
               </p>
-              <div className="mt-8 grid grid-cols-5 gap-3 md:gap-4">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Real-time</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <rect width="18" height="18" x="3" y="3" rx="2" />
-                      <path d="M7 7h10" />
-                      <path d="M7 12h10" />
-                      <path d="M7 17h10" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Multi-source</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                      <path d="M21 3v5h-5" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Continuous</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <rect width="20" height="14" x="2" y="3" rx="2" />
-                      <path d="M8 21h8" />
-                      <path d="M12 17v4" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Automated</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-300">
-                      <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Scalable</span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -145,57 +96,6 @@ export default function Home() {
               <p className="text-white/70 leading-relaxed">
                 Intelligent agents cluster related issues, summarize the problem, and identify the root cause.
               </p>
-              <div className="mt-8 grid grid-cols-5 gap-3 md:gap-4">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
-                      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
-                      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Clustering</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
-                      <path d="m19 9-5 5-4-4-3 3" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Analysis</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                      <path d="M12 17h.01" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Patterns</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
-                      <path d="M9 18h6" />
-                      <path d="M10 22h4" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Insights</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-300">
-                      <circle cx="12" cy="12" r="10" />
-                      <circle cx="12" cy="12" r="6" />
-                      <circle cx="12" cy="12" r="2" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Context</span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -214,54 +114,6 @@ export default function Home() {
               <p className="text-white/70 leading-relaxed">
                 Generates code fixes and opens Pull Requests automatically. Review and merge with confidence.
               </p>
-              <div className="mt-8 grid grid-cols-5 gap-3 md:gap-4">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <rect width="18" height="18" x="3" y="3" rx="2" />
-                      <path d="M3 9h18" />
-                      <path d="M9 21V9" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Automated</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-                      <path d="M2 12h20" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Precise</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Fast</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60">
-                      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-                      <path d="m9 12 2 2 4-4" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Reliable</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-white/5 ring-1 ring-white/10 flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-300">
-                      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-                      <path d="m9 12 2 2 4-4" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] md:text-xs text-white/60">Verified</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
