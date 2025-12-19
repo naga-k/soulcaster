@@ -590,7 +590,7 @@ def main():
                 f.write(final_pr_body)
 
             run_command(
-                f"gh pr edit {json.dumps(pr_url)} --body-file {final_pr_body_file}",
+                f"gh pr edit {shlex.quote(pr_url)} --body-file {shlex.quote(final_pr_body_file)}",
                 cwd=cwd
             )
             log("PR description updated!")
@@ -600,7 +600,7 @@ def main():
         # Mark PR as ready for review
         log("Marking PR as ready for review...")
         try:
-            run_command(f"gh pr ready {json.dumps(pr_url)}", cwd=cwd)
+            run_command(f"gh pr ready {shlex.quote(pr_url)}", cwd=cwd)
             log("PR marked as ready!")
         except Exception as e:
             log(f"Could not mark PR as ready (may already be ready): {e}")
