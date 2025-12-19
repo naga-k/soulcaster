@@ -95,33 +95,31 @@ export default function ClusterDetailPage() {
   }, [clusterId]);
 
   const fetchJobLogs = useCallback(
-    async (jobId: string, opts?: { append?: boolean }) => {
-      const append = opts?.append ?? false;
-      const cursor = append ? logCursor : 0;
+    async (jobId: string) => {
       const response = await fetch(
-        `/api/jobs/${encodeURIComponent(jobId)}/job-logs?cursor=${cursor}&limit=200`
+        `/api/jobs/${encodeURIComponent(jobId)}/job-logs`
       );
       if (!response.ok) {
         throw new Error('Failed to fetch logs');
       }
+
       const payload = await response.json();
       const chunks = (payload?.chunks as string[]) || [];
-      const nextCursor =
-        typeof payload?.next_cursor === 'number'
-          ? payload.next_cursor
-          : cursor + chunks.length;
-      if (append) {
-        setLogText((prev) => prev + chunks.join(''));
+      const source = payload?.source || 'unknown';
+
+      // Update logs
+      setLogText(chunks.join(''));
+
+      // For Blob source (completed jobs), stop tailing
+      if (source === 'blob') {
+        setIsTailingLogs(false);
       } else {
-        setLogText(chunks.join(''));
+        // For memory source (running jobs), continue tailing if job is still running
+        const job = fixJobs.find((j) => j.id === jobId);
+        setIsTailingLogs(Boolean(job && job.status === 'running'));
       }
-      setLogCursor(nextCursor);
-      setIsTailingLogs(
-        Boolean(payload?.has_more) ||
-          fixJobs.some((j) => j.id === jobId && j.status === 'running')
-      );
     },
-    [logCursor, fixJobs]
+    [fixJobs]
   );
 
   // Initial data fetch
