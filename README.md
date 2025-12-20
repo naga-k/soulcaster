@@ -31,7 +31,7 @@ Soulcaster is an open-source feedback triage and automated fix generation system
   - Selects relevant files to modify
   - Generates code patches
   - Opens GitHub pull requests from the authenticated user's account
-  - Runs in E2B sandboxes (default) or AWS Fargate (legacy)
+  - Runs in E2B sandboxes
 
 - **Job Tracking**: Monitor agent fix generation jobs with status updates, logs, and PR links
 
@@ -48,7 +48,6 @@ The system consists of three main components:
 
 1. **Backend (FastAPI)**: Python service handling ingestion, clustering, and agent orchestration
 2. **Dashboard (Next.js)**: Web interface for triage and management
-3. **Coding Agent**: Standalone service that generates fixes and opens PRs
 
 ## Prerequisites
 
@@ -163,10 +162,6 @@ See `.env.example` for all available environment variables. Key configuration in
 - `GITHUB_OWNER` - Default GitHub repository owner (for new issues)
 - `GITHUB_REPO` - Default GitHub repository name (for new issues)
 - `ENABLE_DASHBOARD_CLUSTERING` - (default `false`) temporarily re-enable deprecated dashboard-run clustering APIs for dev-only experiments; production setups should keep this unset so clustering remains backend-owned
-- AWS configuration (for Fargate agent deployment):
-  - `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
-  - `ECS_CLUSTER_NAME`, `ECS_TASK_DEFINITION`
-  - `ECS_SUBNET_IDS`, `ECS_SECURITY_GROUP_IDS`
 
 ## Development
 
@@ -227,7 +222,6 @@ soulcaster/
 │   ├── components/     # React components
 │   ├── lib/           # Utility libraries
 │   └── __tests__/     # Dashboard tests
-├── coding-agent/      # Standalone coding agent service
 └── documentation/     # Additional documentation
 ```
 
@@ -249,7 +243,7 @@ soulcaster/
    - Links to original feedback items
 5. **Fix Generation**: When you click "Generate Fix":
    - A job is created and tracked
-   - The coding agent (local or Fargate) is triggered
+   - The coding agent (E2B sandbox) is triggered
    - Agent analyzes the cluster context and generates code patches
    - Creates a branch and opens a GitHub PR
    - Job status updates with logs and PR link
