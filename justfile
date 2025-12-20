@@ -12,7 +12,7 @@ default:
 # Run FastAPI backend (localhost:8000)
 dev-backend:
     @echo "🚀 Starting FastAPI backend on http://localhost:8000"
-    cd backend && uv run uvicorn main:app --reload --port 8000
+    cd backend && uv run --no-project uvicorn main:app --reload --port 8000
 
 # Run Next.js dashboard (localhost:3000)
 dev-dashboard:
