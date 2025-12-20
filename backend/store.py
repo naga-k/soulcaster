@@ -312,6 +312,15 @@ class InMemoryStore:
         # Generic key-value config storage
         self.config: Dict[str, str] = {}
 
+    def ping(self) -> bool:
+        """
+        Health check for in-memory store.
+
+        Returns:
+            bool: Always True since in-memory store is always available.
+        """
+        return True
+
     # Feedback
     def add_feedback_item(self, item: FeedbackItem) -> FeedbackItem:
         """
@@ -1114,6 +1123,28 @@ class RedisStore:
     def _coding_plan_key(cluster_id: str) -> str:
         """Match dashboard: coding_plan:{clusterId}"""
         return f"coding_plan:{cluster_id}"
+
+    def ping(self) -> bool:
+        """
+        Health check for Redis connection.
+
+        Returns:
+            bool: True if connection is healthy, False otherwise.
+
+        Raises:
+            Exception: If Redis connection fails.
+        """
+        try:
+            if self.mode == "redis":
+                # Use redis-py's ping
+                self.client.ping()
+            else:
+                # Use REST API ping
+                self.client._cmd("PING")
+            return True
+        except Exception as e:
+            logger.error(f"Redis ping failed: {e}")
+            raise
 
     def add_coding_plan(self, plan: CodingPlan) -> CodingPlan:
         """
@@ -2096,6 +2127,53 @@ class RedisStore:
         has_more = next_cursor < total
         return (items, next_cursor, has_more)
 
+    def archive_job_logs_to_blob(self, job_id: UUID) -> Optional[str]:
+        """
+        Archive job logs from Redis to Vercel Blob.
+
+        1. Fetch all logs from Redis list
+        2. Upload to Blob
+        3. Update job with blob_url
+        4. Delete Redis logs (don't wait for TTL)
+
+        Returns: blob_url if successful, None otherwise
+        """
+        from blob_storage import upload_job_logs_to_blob
+
+        # Fetch all log chunks from Redis
+        chunks, _, _ = self.get_job_logs(job_id, cursor=0, limit=100000)
+        if not chunks:
+            logger.warning(f"No logs found for job {job_id}")
+            return None
+
+        # Concatenate all chunks (chunks already contain newlines)
+        full_logs = "".join(chunks)
+
+        # Upload to Blob
+        try:
+            blob_url = upload_job_logs_to_blob(job_id, full_logs)
+            logger.info(f"Uploaded logs for job {job_id} to Blob: {blob_url}")
+        except Exception:
+            logger.exception(f"Failed to upload logs to Blob for job {job_id}")
+            return None
+
+        # Update job record with blob_url
+        try:
+            self.update_job(job_id, blob_url=blob_url)
+        except Exception:
+            logger.exception(f"Failed to update job {job_id} with blob_url")
+            return None
+
+        # Delete Redis logs to free memory
+        try:
+            logs_key = self._job_logs_key(job_id)
+            self.client.delete(logs_key)
+            logger.info(f"Deleted Redis logs for job {job_id}")
+        except Exception:
+            logger.warning(f"Failed to delete Redis logs for job {job_id}")
+
+        return blob_url
+
     def get_jobs_by_cluster(self, cluster_id: str) -> List[AgentJob]:
         key = self._cluster_jobs_key(cluster_id)
         ids = self._zrange(key, 0, -1, rev=True)  # Newest first
@@ -2627,6 +2705,19 @@ _STORE = _select_store()
 
 
 # Public API (delegates to current store)
+def ping() -> bool:
+    """
+    Health check for the storage backend.
+
+    Returns:
+        bool: True if the store is healthy and accessible.
+
+    Raises:
+        Exception: If the store is not accessible.
+    """
+    return _STORE.ping()
+
+
 def add_feedback_item(item: FeedbackItem) -> FeedbackItem:
     return _STORE.add_feedback_item(item)
 
@@ -2808,6 +2899,13 @@ def get_job_logs(job_id: UUID, cursor: int = 0, limit: int = 200) -> tuple[list[
     if hasattr(_STORE, "get_job_logs"):
         return _STORE.get_job_logs(job_id, cursor=cursor, limit=limit)
     return ([], cursor, False)
+
+
+def archive_job_logs_to_blob(job_id: UUID) -> Optional[str]:
+    """Archive job logs to Vercel Blob storage."""
+    if hasattr(_STORE, "archive_job_logs_to_blob"):
+        return _STORE.archive_job_logs_to_blob(job_id)
+    return None
 
 
 def clear_jobs():

@@ -80,6 +80,7 @@ from store import (
     set_datadog_config as set_datadog_config_value,
     get_posthog_config as get_posthog_config_value,
     set_posthog_config as set_posthog_config_value,
+    ping,
 )
 from planner import generate_plan
 from github_client import fetch_repo_issues, issue_to_feedback_item
@@ -146,8 +147,45 @@ GITHUB_SYNC_STATE: Dict[Tuple[str, str], Dict[str, str]] = {}
 
 @app.get("/")
 def read_root():
-    """Health check endpoint."""
+    """Basic root endpoint."""
     return {"status": "ok", "service": "soulcaster-ingestion"}
+
+
+@app.get("/health")
+def health_check():
+    """
+    Health check endpoint for monitoring and load balancers.
+
+    Checks:
+    - Service is running
+    - Storage backend (Redis/in-memory) is accessible
+
+    Returns:
+        200 OK if healthy
+        503 Service Unavailable if storage is down
+    """
+    try:
+        environment = os.getenv("ENVIRONMENT", "development")
+        store_healthy = ping()
+
+        return {
+            "status": "healthy",
+            "service": "soulcaster-backend",
+            "environment": environment,
+            "storage": "connected" if store_healthy else "disconnected",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "service": "soulcaster-backend",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
 
 def _require_project_id(project_id: Optional[UUID | str]) -> str:
@@ -2274,26 +2312,42 @@ def get_job_details(job_id: UUID, project_id: Optional[str] = Query(None)):
 def get_job_log_lines(
     job_id: UUID,
     project_id: Optional[str] = Query(None),
-    cursor: int = Query(0, ge=0),
-    limit: int = Query(200, ge=1, le=1000),
 ):
     """
-    Retrieve persisted log chunks for a job.
+    Retrieve logs for a job from memory (if running) or Blob (if completed).
 
-    This endpoint is designed for UI log tailing without forcing the backend to print logs to stdout.
+    Returns logs from in-memory buffer for running jobs, or from Vercel Blob for completed jobs.
     """
     pid = _require_project_id(project_id)
     job = get_job(job_id)
     if not job or str(job.project_id) != pid:
         raise HTTPException(status_code=404, detail="Job not found for project")
-    chunks, next_cursor, has_more = get_job_logs(job_id, cursor=cursor, limit=limit)
+
+    # For completed jobs with blob_url, fetch from Blob
+    if job.blob_url and job.status in ("success", "failed"):
+        try:
+            from blob_storage import fetch_job_logs_from_blob
+            logs = fetch_job_logs_from_blob(job.blob_url)
+            return {
+                "job_id": str(job_id),
+                "project_id": str(pid),
+                "source": "blob",
+                "chunks": [logs],
+            }
+        except Exception:
+            logger.exception(f"Failed to fetch logs from Blob for job {job_id}")
+            # Fall through to memory as fallback
+
+    # For running jobs or fallback, fetch from memory
+    import job_logs_manager
+    logs = job_logs_manager.get_logs(job_id)
+    full_logs = "".join(logs) if logs else ""
+
     return {
         "job_id": str(job_id),
         "project_id": str(pid),
-        "cursor": cursor,
-        "next_cursor": next_cursor,
-        "has_more": has_more,
-        "chunks": chunks,
+        "source": "memory",
+        "chunks": [full_logs] if full_logs else [],
     }
 
 
