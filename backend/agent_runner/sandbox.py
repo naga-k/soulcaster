@@ -616,6 +616,21 @@ if __name__ == "__main__":
 """
 
 class SandboxKilocodeRunner(AgentRunner):
+    async def _archive_logs_to_blob(self, job_id: UUID) -> None:
+        """Archive job logs from memory to Blob storage."""
+        try:
+            logs = job_logs_manager.get_logs(job_id)
+            if logs:
+                full_logs = "".join(logs)
+                blob_url = await asyncio.to_thread(upload_job_logs_to_blob, job_id, full_logs)
+                await asyncio.to_thread(update_job, job_id, blob_url=blob_url)
+                job_logs_manager.clear_logs(job_id)
+                logger.info(f"Job {job_id} logs archived to Blob: {blob_url}")
+            else:
+                logger.warning(f"No logs found in memory for job {job_id}")
+        except Exception:
+            logger.exception(f"Failed to archive logs for job {job_id}")
+
     async def start(
         self,
         job: AgentJob,
@@ -803,22 +818,7 @@ class SandboxKilocodeRunner(AgentRunner):
                       logger.warning("Failed to update cluster %s on success: %s", job.cluster_id, e)
 
                   # Archive logs to Blob
-                  try:
-                      # Get logs from memory
-                      logs = job_logs_manager.get_logs(job.id)
-                      if logs:
-                          full_logs = "".join(logs)
-                          # Upload to Blob
-                          blob_url = await asyncio.to_thread(upload_job_logs_to_blob, job.id, full_logs)
-                          # Update job with blob_url
-                          await asyncio.to_thread(update_job, job.id, blob_url=blob_url)
-                          # Clear from memory
-                          job_logs_manager.clear_logs(job.id)
-                          logger.info(f"Job {job.id} logs archived to Blob: {blob_url}")
-                      else:
-                          logger.warning(f"No logs found in memory for job {job.id}")
-                  except Exception as e:
-                      logger.warning(f"Failed to archive logs for job {job.id}: {e}")
+                  await self._archive_logs_to_blob(job.id)
              else:
                   await self._fail_job(job.id, f"Agent script exited with code {proc.exit_code}")
 
@@ -894,21 +894,6 @@ class SandboxKilocodeRunner(AgentRunner):
                 logger.error(f"Failed to update cluster status: {e}")
 
         # Archive logs to Blob
-        try:
-            # Get logs from memory
-            logs = job_logs_manager.get_logs(job_id)
-            if logs:
-                full_logs = "".join(logs)
-                # Upload to Blob
-                blob_url = await asyncio.to_thread(upload_job_logs_to_blob, job_id, full_logs)
-                # Update job with blob_url
-                await asyncio.to_thread(update_job, job_id, blob_url=blob_url)
-                # Clear from memory
-                job_logs_manager.clear_logs(job_id)
-                logger.info(f"Job {job_id} logs archived to Blob: {blob_url}")
-            else:
-                logger.warning(f"No logs found in memory for job {job_id}")
-        except Exception as e:
-            logger.warning(f"Failed to archive logs for job {job_id}: {e}")
+        await self._archive_logs_to_blob(job_id)
 
 register_runner("sandbox_kilo", SandboxKilocodeRunner)

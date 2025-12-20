@@ -45,7 +45,6 @@ export default function ClusterDetailPage() {
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [selectedJobForLogs, setSelectedJobForLogs] = useState<AgentJob | null>(null);
   const [logText, setLogText] = useState<string>('');
-  const [logCursor, setLogCursor] = useState(0);
   const [isTailingLogs, setIsTailingLogs] = useState(false);
 
   // Fetch functions (defined before effects that use them)
@@ -197,7 +196,6 @@ export default function ClusterDetailPage() {
 
   const handleViewLogs = async (job: AgentJob) => {
     setSelectedJobForLogs(job);
-    setLogCursor(0);
     setLogText('');
     setLogDrawerOpen(true);
     try {

@@ -2296,8 +2296,8 @@ def get_job_log_lines(
                 "source": "blob",
                 "chunks": [logs],
             }
-        except Exception as e:
-            logger.error(f"Failed to fetch logs from Blob: {e}")
+        except Exception:
+            logger.exception(f"Failed to fetch logs from Blob for job {job_id}")
             # Fall through to memory as fallback
 
     # For running jobs or fallback, fetch from memory

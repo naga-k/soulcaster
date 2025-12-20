@@ -49,10 +49,10 @@ def upload_job_logs_to_blob(job_id: UUID, logs: str) -> str:
         return blob_url
 
     except ImportError:
-        logger.error("vercel_blob package not installed")
-        raise Exception("vercel_blob package not installed. Run: pip install vercel-blob")
-    except Exception as e:
-        logger.error(f"Failed to upload logs to Blob for job {job_id}: {e}")
+        logger.exception("vercel_blob package not installed")
+        raise ImportError("vercel_blob package not installed. Run: pip install vercel-blob") from None
+    except Exception:
+        logger.exception(f"Failed to upload logs to Blob for job {job_id}")
         raise
 
 
@@ -76,8 +76,8 @@ def fetch_job_logs_from_blob(blob_url: str) -> str:
         response.raise_for_status()
         return response.text
 
-    except Exception as e:
-        logger.error(f"Failed to fetch logs from Blob at {blob_url}: {e}")
+    except Exception:
+        logger.exception(f"Failed to fetch logs from Blob at {blob_url}")
         raise
 
 

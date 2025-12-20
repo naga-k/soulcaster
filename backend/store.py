@@ -2115,22 +2115,22 @@ class RedisStore:
             logger.warning(f"No logs found for job {job_id}")
             return None
 
-        # Concatenate all chunks
-        full_logs = "\n".join(chunks)
+        # Concatenate all chunks (chunks already contain newlines)
+        full_logs = "".join(chunks)
 
         # Upload to Blob
         try:
             blob_url = upload_job_logs_to_blob(job_id, full_logs)
             logger.info(f"Uploaded logs for job {job_id} to Blob: {blob_url}")
-        except Exception as e:
-            logger.error(f"Failed to upload logs to Blob for job {job_id}: {e}")
+        except Exception:
+            logger.exception(f"Failed to upload logs to Blob for job {job_id}")
             return None
 
         # Update job record with blob_url
         try:
             self.update_job(job_id, blob_url=blob_url)
-        except Exception as e:
-            logger.error(f"Failed to update job {job_id} with blob_url: {e}")
+        except Exception:
+            logger.exception(f"Failed to update job {job_id} with blob_url")
             return None
 
         # Delete Redis logs to free memory
@@ -2138,8 +2138,8 @@ class RedisStore:
             logs_key = self._job_logs_key(job_id)
             self.client.delete(logs_key)
             logger.info(f"Deleted Redis logs for job {job_id}")
-        except Exception as e:
-            logger.warning(f"Failed to delete Redis logs for job {job_id}: {e}")
+        except Exception:
+            logger.warning(f"Failed to delete Redis logs for job {job_id}")
 
         return blob_url
 
