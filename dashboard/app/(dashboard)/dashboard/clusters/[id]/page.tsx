@@ -113,13 +113,10 @@ export default function ClusterDetailPage() {
       // For Blob source (completed jobs), stop tailing
       if (source === 'blob') {
         setIsTailingLogs(false);
-      } else {
-        // For memory source (running jobs), continue tailing if job is still running
-        const job = fixJobs.find((j) => j.id === jobId);
-        setIsTailingLogs(Boolean(job && job.status === 'running'));
       }
+      // For memory source, keep current tailing state (controlled by job status polling)
     },
-    [fixJobs]
+    []
   );
 
   // Initial data fetch
@@ -151,7 +148,7 @@ export default function ClusterDetailPage() {
   useEffect(() => {
     if (!selectedJobForLogs?.id || !isTailingLogs) return;
     const interval = setInterval(
-      () => fetchJobLogs(selectedJobForLogs.id, { append: true }),
+      () => fetchJobLogs(selectedJobForLogs.id),
       2000
     );
     return () => clearInterval(interval);

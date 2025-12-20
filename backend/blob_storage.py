@@ -13,7 +13,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Get Vercel Blob token from environment
-BLOB_TOKEN = os.getenv("BLOB_READ_WRITE_TOKEN")
+BLOB_TOKEN = os.getenv("BLOB_READ_WRITE_TOKEN") or os.getenv("soulcaster_agent_logs_dev_READ_WRITE_TOKEN")
 
 
 def upload_job_logs_to_blob(job_id: UUID, logs: str) -> str:
