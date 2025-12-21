@@ -21,6 +21,7 @@ from store import (
     acquire_cluster_lock,
     add_feedback_to_cluster,
     get_all_clusters,
+    get_cluster,
     get_unclustered_feedback,
     list_cluster_jobs,
     release_cluster_lock,
@@ -248,11 +249,19 @@ def _run_vector_clustering(
                         "cluster_id": result.cluster_id,
                     })
                     # Also add to Redis cluster
-                    add_feedback_to_cluster(result.cluster_id, grouped_id)
+                    add_feedback_to_cluster(result.cluster_id, grouped_id, project_id)
         else:
-            # Join existing cluster
-            updated_cluster_ids.add(result.cluster_id)
-            add_feedback_to_cluster(result.cluster_id, str(item.id))
+            # Join existing cluster - but verify it exists in Redis first
+            existing_cluster = get_cluster(project_id, result.cluster_id)
+            if existing_cluster:
+                updated_cluster_ids.add(result.cluster_id)
+                add_feedback_to_cluster(result.cluster_id, str(item.id), project_id)
+            else:
+                # Cluster exists in vector DB but not in Redis - create it
+                cluster = _build_cluster([item])
+                cluster.id = result.cluster_id
+                new_clusters.append(cluster)
+                add_cluster(cluster)
 
         # Prepare vector store upsert
         vector_upserts.append({

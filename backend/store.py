@@ -1739,22 +1739,72 @@ class RedisStore:
                 parts = key.split(":")
                 if len(parts) >= 2:
                     pid = parts[1]
-                    # Get cluster IDs for this project (sorted by created_at desc)
-                    cluster_ids = self._zrange(self._cluster_all_key(pid), 0, -1, rev=True)
-                    # Load each cluster
-                    for cid in cluster_ids:
-                        cluster = self.get_cluster(pid, cid)
-                        if cluster:
-                            clusters.append(cluster)
+                    # Recursively call with specific project_id to use batching
+                    clusters.extend(self.get_all_clusters(pid))
             return clusters
 
         # Use ZRANGE with rev=True to get clusters sorted by created_at descending
         ids = self._zrange(self._cluster_all_key(project_id), 0, -1, rev=True)
+        if not ids:
+            return []
+
+        # Batch fetch all cluster hashes using pipelining
+        hash_keys = [self._cluster_key(project_id, cid) for cid in ids]
+        items_keys = [self._cluster_items_key(project_id, cid) for cid in ids]
+
+        # Fetch all hashes in one batch
+        hash_results = self._hgetall_batch(hash_keys)
+
+        # Batch fetch feedback_ids from all cluster item sets
+        if self.mode == "redis":
+            pipe = self.client.pipeline()
+            for items_key in items_keys:
+                pipe.smembers(items_key)
+            items_results = pipe.execute()
+        else:
+            # For REST API, use pipeline_exec with SMEMBERS
+            commands = [["SMEMBERS", key] for key in items_keys]
+            items_results = self.client.pipeline_exec(commands)
+
+        # Parse results into IssueCluster objects
         clusters: List[IssueCluster] = []
-        for cid in ids:
-            cluster = self.get_cluster(project_id, cid)
-            if cluster:
-                clusters.append(cluster)
+        for i, (cid, data) in enumerate(zip(ids, hash_results)):
+            if not data:
+                continue
+
+            # Parse date fields
+            for field in ("created_at", "updated_at"):
+                if isinstance(data.get(field), str):
+                    data[field] = _iso_to_dt(data[field])
+
+            # Parse centroid
+            if isinstance(data.get("centroid"), str):
+                try:
+                    data["centroid"] = json.loads(data["centroid"])
+                except json.JSONDecodeError:
+                    data["centroid"] = []
+
+            # Parse sources
+            if isinstance(data.get("sources"), str):
+                try:
+                    data["sources"] = json.loads(data["sources"])
+                except json.JSONDecodeError:
+                    data["sources"] = []
+
+            # Use batched feedback_ids
+            feedback_ids = items_results[i] if i < len(items_results) else []
+            if isinstance(feedback_ids, set):
+                feedback_ids = list(feedback_ids)
+            elif feedback_ids is None:
+                feedback_ids = []
+            data["feedback_ids"] = feedback_ids
+
+            try:
+                clusters.append(IssueCluster(**data))
+            except Exception:
+                # Skip malformed clusters
+                continue
+
         return clusters
 
     def update_cluster(self, project_id: str, cluster_id: str, **updates) -> IssueCluster:
@@ -2298,15 +2348,16 @@ class RedisStore:
     def list_cluster_jobs(self, project_id: str, limit: int = 20) -> List[ClusterJob]:
         """
         Retrieve recent cluster jobs for a project in newest-first order.
-        
+
         Parameters:
             project_id (str): Project identifier to list cluster jobs for.
             limit (int): Maximum number of jobs to return; defaults to 20.
-        
+
         Returns:
             List[ClusterJob]: List of ClusterJob objects ordered from newest to oldest; may contain fewer than `limit` if not enough jobs exist.
         """
-        ids = self._zrange(self._cluster_jobs_recent_key(project_id), -limit, -1, rev=True)
+        # Use ZRANGE 0 limit-1 REV to get top N items by score (newest first)
+        ids = self._zrange(self._cluster_jobs_recent_key(project_id), 0, limit - 1, rev=True)
         jobs: List[ClusterJob] = []
         for jid in ids:
             job = self.get_cluster_job(project_id, jid)
