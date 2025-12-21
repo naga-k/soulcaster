@@ -8,6 +8,7 @@ for efficient approximate nearest neighbor (ANN) search.
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
 from uuid import uuid4
@@ -153,12 +154,14 @@ class VectorStore:
         token = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
 
         if not url or not token:
-            logger.warning("[VectorStore] UPSTASH_VECTOR credentials not set")
+            raise RuntimeError(
+                "UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN must be set"
+            )
 
         if Index is None:
             raise RuntimeError("upstash-vector is not installed")
 
-        self.index = Index(url=url or "", token=token or "")
+        self.index = Index(url=url, token=token)
 
     def upsert_feedback(
         self,
@@ -467,11 +470,14 @@ def find_similar_clusters(
 
 # Singleton instance
 _vector_store_instance: Optional[VectorStore] = None
+_vector_store_lock = threading.Lock()
 
 
 def get_vector_store() -> VectorStore:
     """Get or create the singleton VectorStore instance."""
     global _vector_store_instance
     if _vector_store_instance is None:
-        _vector_store_instance = VectorStore()
+        with _vector_store_lock:
+            if _vector_store_instance is None:
+                _vector_store_instance = VectorStore()
     return _vector_store_instance
