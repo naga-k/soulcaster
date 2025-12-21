@@ -38,6 +38,15 @@ export default function ClustersListPage() {
 
   const jobIsRunning = latestJob?.status === 'running';
 
+  const isValidHttpUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       await fetchClusters();
@@ -372,7 +381,16 @@ export default function ClustersListPage() {
                       <tr
                         key={cluster.id}
                         onClick={() => router.push(`/dashboard/clusters/${cluster.id}`)}
-                        className="group cursor-pointer transition-colors hover:bg-white/5"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            router.push(`/dashboard/clusters/${cluster.id}`);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="link"
+                        aria-label={`View cluster: ${cluster.issue_title || cluster.title || 'Untitled Cluster'}`}
+                        className="group cursor-pointer transition-colors hover:bg-white/5 focus:bg-white/5 focus:outline-none"
                       >
                         <td className="px-3 sm:px-4 py-3">
                           <div className="flex flex-col gap-0.5 min-w-0">
@@ -386,7 +404,7 @@ export default function ClustersListPage() {
                         </td>
                         <td className="hidden sm:table-cell px-4 py-3">
                           <div className="flex flex-col gap-1 min-w-0">
-                            {cluster.github_repo_url && (
+                            {cluster.github_repo_url && isValidHttpUrl(cluster.github_repo_url) && (
                               <a
                                 href={cluster.github_repo_url}
                                 target="_blank"

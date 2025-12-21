@@ -1825,7 +1825,7 @@ class RedisStore:
         items_key = self._cluster_items_key(project_id, cluster_id)
         all_key = self._cluster_all_key(project_id)
         self._delete(cluster_key, items_key)
-        self._srem(all_key, cluster_id)
+        self._zrem(all_key, cluster_id)
 
     def clear_clusters(self, project_id: Optional[str] = None):
         """
@@ -2646,6 +2646,12 @@ class RedisStore:
         if self.mode == "redis":
             return self.client.zrange(key, start, stop, desc=rev)
         return self.client.zrange(key, start, stop, rev=rev)
+
+    def _zrem(self, key: str, member: str):
+        if self.mode == "redis":
+            self.client.zrem(key, member)
+        else:
+            self.client.zrem(key, member)
 
     def _sadd(self, key: str, member: str):
         if self.mode == "redis":
