@@ -73,7 +73,16 @@ class ClusterCohesion:
 
 
 def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
-    """Compute cosine similarity between two vectors."""
+    """
+    Compute the cosine similarity between two numeric vectors.
+    
+    Parameters:
+        a (Sequence[float]): First vector.
+        b (Sequence[float]): Second vector.
+    
+    Returns:
+        float: Cosine similarity in the range [-1.0, 1.0]; returns 0.0 if either vector has zero magnitude.
+    """
     a_arr = np.array(a, dtype=np.float32)
     b_arr = np.array(b, dtype=np.float32)
     dot = np.dot(a_arr, b_arr)
@@ -88,13 +97,14 @@ def calculate_cluster_cohesion(
     embeddings: List[List[float]], cluster_id: str
 ) -> ClusterCohesion:
     """
-    Calculate cohesion score for a cluster.
-
-    Cohesion = average pairwise similarity between all items in the cluster.
-    Quality thresholds:
-      - tight (>0.85): Items are very similar, clear cluster
-      - moderate (0.70-0.85): Related items, good for triage
-      - loose (<0.70): Broad grouping, consider splitting
+    Compute cohesion metrics for a cluster from its member embeddings.
+    
+    Parameters:
+        embeddings (List[List[float]]): List of numeric embedding vectors belonging to the cluster.
+        cluster_id (str): Identifier of the cluster.
+    
+    Returns:
+        ClusterCohesion: Cohesion metrics including `avg_similarity`, `min_similarity`, `max_similarity`, `item_count`, and `quality` (`'tight'`, `'moderate'`, or `'loose'`).
     """
     if len(embeddings) <= 1:
         return ClusterCohesion(
@@ -150,6 +160,14 @@ class VectorStore:
     """
 
     def __init__(self):
+        """
+        Initialize the VectorStore connection to Upstash Vector.
+        
+        Reads UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN from the environment, logs a warning if either credential is missing, raises RuntimeError if the Upstash Vector client (`Index`) is not available, and creates the Index instance used for subsequent store operations.
+        
+        Raises:
+            RuntimeError: If the Upstash Vector client library is not installed or `Index` is None.
+        """
         url = os.getenv("UPSTASH_VECTOR_REST_URL")
         token = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
 
@@ -169,7 +187,14 @@ class VectorStore:
         embedding: List[float],
         metadata: FeedbackVectorMetadata,
     ) -> None:
-        """Store a single feedback embedding."""
+        """
+        Upsert a single feedback embedding and its metadata into the vector store.
+        
+        Parameters:
+        	feedback_id (str): Unique identifier for the feedback item.
+        	embedding (List[float]): The embedding vector for the feedback.
+        	metadata (FeedbackVectorMetadata): Metadata associated with the feedback. `title` and `source` are stored as provided; `cluster_id` and `created_at` are stored as empty strings if `None`.
+        """
         self.index.upsert(
             vectors=[
                 {
@@ -190,9 +215,15 @@ class VectorStore:
         items: List[Dict],
     ) -> None:
         """
-        Store multiple feedback embeddings in batch.
-
-        Each item should have: id, embedding, metadata (FeedbackVectorMetadata)
+        Upserts multiple feedback embeddings and their metadata into the vector index.
+        
+        Each item in `items` must be a dict with keys:
+        - `id` (str): unique identifier for the feedback item.
+        - `embedding` (List[float]): embedding vector.
+        - `metadata` (FeedbackVectorMetadata): metadata whose `title`, `source`, `cluster_id`, and `created_at` will be stored (empty strings are used when `cluster_id` or `created_at` are None).
+        
+        Parameters:
+            items (List[Dict]): List of items to upsert, each containing `id`, `embedding`, and `metadata`.
         """
         vectors = [
             {
@@ -217,13 +248,16 @@ class VectorStore:
         exclude_ids: Optional[List[str]] = None,
     ) -> List[SimilarFeedback]:
         """
-        Find similar feedback items by embedding.
-
-        Args:
-            embedding: Query embedding vector
-            top_k: Maximum number of results to return
-            min_score: Minimum similarity score (0-1)
-            exclude_ids: IDs to exclude from results
+        Finds feedback items similar to a query embedding using the vector index.
+        
+        Parameters:
+            embedding (List[float]): Query embedding vector.
+            top_k (int): Maximum number of candidates to consider from the index.
+            min_score (float): Minimum similarity score to include (0.0 to 1.0).
+            exclude_ids (Optional[List[str]]): Feedback IDs to exclude from the results.
+        
+        Returns:
+            List[SimilarFeedback]: Matching feedback items that meet the criteria, ordered by descending similarity score.
         """
         results = self.index.query(
             vector=embedding,
@@ -260,7 +294,17 @@ class VectorStore:
         cluster_id: str,
         top_k: int = 10,
     ) -> List[SimilarFeedback]:
-        """Find similar items within a specific cluster."""
+        """
+        Find similar feedback vectors that belong to the specified cluster.
+        
+        Parameters:
+            embedding (List[float]): Query embedding vector to search with.
+            cluster_id (str): Cluster identifier to restrict results to.
+            top_k (int): Maximum number of matching items to return.
+        
+        Returns:
+            List[SimilarFeedback]: SimilarFeedback objects from the given cluster ordered by descending similarity, up to `top_k`.
+        """
         # Query more items since we'll filter by cluster
         results = self.index.query(
             vector=embedding,
@@ -285,7 +329,16 @@ class VectorStore:
         return similar
 
     def update_cluster_assignment(self, feedback_id: str, cluster_id: str) -> None:
-        """Update the cluster assignment for a single feedback item."""
+        """
+        Update the cluster assignment for a single feedback item.
+        
+        Parameters:
+        	feedback_id (str): ID of the feedback vector to update.
+        	cluster_id (str): Cluster identifier to assign to the feedback.
+        
+        Raises:
+        	ValueError: If the feedback item with `feedback_id` is not found in the vector store.
+        """
         # Fetch current vector and metadata
         existing = self.index.fetch(ids=[feedback_id], include_metadata=True, include_vectors=True)
 
@@ -319,10 +372,10 @@ class VectorStore:
         self, assignments: List[Dict[str, str]]
     ) -> None:
         """
-        Batch update cluster assignments.
-
-        Args:
-            assignments: List of {"feedback_id": str, "cluster_id": str}
+        Update the stored cluster assignment for multiple feedback vectors.
+        
+        Parameters:
+            assignments (List[Dict[str, str]]): List of mappings with keys "feedback_id" and "cluster_id" specifying the new cluster assignment for each feedback item.
         """
         feedback_ids = [a["feedback_id"] for a in assignments]
         existing = self.index.fetch(ids=feedback_ids, include_metadata=True, include_vectors=True)
@@ -357,15 +410,29 @@ class VectorStore:
             self.index.upsert(vectors=updates)
 
     def delete_feedback(self, feedback_id: str) -> None:
-        """Delete a single feedback from the vector store."""
+        """
+        Delete a single feedback embedding and its metadata from the vector store.
+        
+        Parameters:
+            feedback_id (str): Identifier of the feedback item to remove.
+        """
         self.index.delete(ids=[feedback_id])
 
     def delete_feedback_batch(self, feedback_ids: List[str]) -> None:
-        """Delete multiple feedback items from the vector store."""
+        """
+        Delete multiple feedback embeddings from the vector store.
+        
+        Parameters:
+            feedback_ids (List[str]): List of feedback item IDs to remove from the vector index.
+        """
         self.index.delete(ids=feedback_ids)
 
     def reset(self) -> None:
-        """Reset the entire vector store (use with caution!)."""
+        """
+        Reset the entire vector store, permanently deleting all stored vectors and metadata.
+        
+        This operation clears the remote index and cannot be undone; use with caution.
+        """
         self.index.reset()
 
 
@@ -378,13 +445,20 @@ def cluster_with_vector_db(
     vector_store: Optional[VectorStore] = None,
 ) -> ClusteringResult:
     """
-    Cluster a single feedback item using vector similarity search.
-
-    Algorithm:
-    1. Query vector DB for similar items
-    2. If top match is above threshold AND is already clustered -> join that cluster
-    3. If top matches are above threshold but unclustered -> create new cluster with them
-    4. If no matches above threshold -> create new single-item cluster
+    Assigns a feedback embedding to an existing cluster or creates a new cluster based on similarity to stored embeddings.
+    
+    Searches the vector store for items with similarity >= threshold (excluding the provided feedback_id). If a matching item already has a cluster assignment, returns that cluster and the similarity to the best clustered match. If matches exist but none are clustered, creates a new cluster that groups those matched item IDs. If no matches are found, creates a new cluster for the single feedback item.
+    
+    Parameters:
+        feedback_id (str): Identifier of the feedback being clustered.
+        embedding (List[float]): Embedding vector for the feedback.
+        source (str): Source identifier for the feedback (kept with metadata).
+        title (str): Title or short text for the feedback (kept with metadata).
+        threshold (float): Similarity cutoff used to consider items as candidates for clustering.
+        vector_store (Optional[VectorStore]): VectorStore instance to query; if omitted a new instance is created.
+    
+    Returns:
+        ClusteringResult: Result containing the assigned `cluster_id`, whether a new cluster was created (`is_new_cluster`), the similarity score when joining an existing cluster (`similarity`), and `grouped_feedback_ids` when a new cluster groups other items.
     """
     if vector_store is None:
         vector_store = VectorStore()
@@ -474,7 +548,12 @@ _vector_store_lock = threading.Lock()
 
 
 def get_vector_store() -> VectorStore:
-    """Get or create the singleton VectorStore instance."""
+    """
+    Get the module-level singleton VectorStore, creating it on first access.
+
+    Returns:
+        vector_store (VectorStore): The shared VectorStore instance used for embedding storage and search.
+    """
     global _vector_store_instance
     if _vector_store_instance is None:
         with _vector_store_lock:

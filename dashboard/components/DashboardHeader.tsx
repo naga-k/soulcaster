@@ -14,11 +14,11 @@ interface DashboardHeaderProps {
 }
 
 /**
- * Shared header component for dashboard pages with navigation.
- * Highlights the active page in the navigation menu.
+ * Dashboard header that renders navigation, brand, and user session controls while highlighting the active page.
  *
- * @param activePage - The currently active page
- * @param className - Optional additional CSS classes to apply to the outer container
+ * @param activePage - Optional explicit active page identifier to force which nav item is highlighted
+ * @param className - Optional CSS class names added to the outer container
+ * @returns The dashboard header element
  */
 export default function DashboardHeader({
   className = '',

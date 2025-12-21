@@ -3,7 +3,7 @@
 ## Project Structure
 - Backend (FastAPI ingestion + clustering + agent orchestration) in `backend/` (`main.py`, `store.py`, `models.py`, `clustering*.py`, `planner.py`, `agent_runner/`, `e2b_template/`, tests under `backend/tests/`).
 - Dashboard (Next.js App Router) in `dashboard/` with pages + API routes in `app/`, Prisma schema in `prisma/`, and shared helpers in `lib/` (`auth.ts`, `prisma.ts`, `project.ts`, `github.ts`, `vector.ts`, `clustering.ts`).
-- Coding agent artifacts in `coding-agent/` (`fix_issue.py`, `Dockerfile`, `terraform/` and `FARGATE_DEPLOYMENT.md` for legacy ECS/Fargate).
+- Coding agent artifacts in `backend/agent_runner/` and `backend/e2b_template/`.
 - Docs: repo root (`README.md`, `AGENTS.md`, `CLAUDE.md`), design notes in `docs/`, architecture + db design in `documentation/`, and roadmap notes in `tasks/`.
 
 ## Backend (FastAPI)
@@ -28,9 +28,6 @@
 - Primary path: backend `POST /clusters/{id}/start_fix` selects `CODING_AGENT_RUNNER` (default: `sandbox_kilo`) and streams logs back via jobs (`/jobs`).
 - `sandbox_kilo` requires `E2B_API_KEY`, `KILOCODE_TEMPLATE_NAME` (or `KILOCODE_TEMPLATE_ID`) and provider creds for Kilocode (e.g. `GEMINI_API_KEY`); GitHub auth comes from `X-GitHub-Token` header or falls back to `GITHUB_TOKEN`.
 - Known edge case: a run can push a branch successfully but fail to return a PR URL (e.g., `gh pr create` fails and the fallback `gh pr list --head <branch>` returns no URL), so a PR may need to be opened manually from the pushed branch.
-
-## Coding Agent (ECS/Fargate) (deprecated)
-- The legacy ECS/Fargate trigger route is kept only for manual/testing scenarios (`dashboard/app/api/trigger-agent/route.ts` + `coding-agent/terraform/`) and should not be used as the default path.
 
 ## Coding Style & Naming
 - Backend: Black + Ruff where available (`black backend && ruff backend`), snake_case functions/modules, PascalCase Pydantic models, UPPER_SNAKE_CASE constants.

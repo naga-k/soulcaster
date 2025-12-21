@@ -10,7 +10,7 @@ This dashboard provides a comprehensive web interface for:
 - **Project Management**: Create and manage multiple projects with isolated feedback
 - **Feedback Triage**: View and manage feedback from Reddit, GitHub, Sentry, and manual sources
 - **Cluster Review**: Browse AI-clustered issues with summaries and context
-- **Fix Generation**: One-click trigger for the coding agent (local or AWS Fargate)
+- **Fix Generation**: One-click trigger for the coding agent
 - **Job Tracking**: Monitor agent jobs with status updates, logs, and PR links
 - **Source Configuration**: Configure Reddit subreddits and GitHub repositories per project
 - **Statistics Dashboard**: View aggregate metrics and trends
@@ -26,7 +26,6 @@ This dashboard provides a comprehensive web interface for:
 - **Upstash Redis** (feedback and cluster storage)
 - **Upstash Vector** (embeddings storage)
 - **Google Gemini** (embeddings and clustering)
-- **AWS SDK** (ECS/Fargate agent deployment)
 
 ## Getting Started
 
@@ -37,7 +36,6 @@ This dashboard provides a comprehensive web interface for:
 - PostgreSQL database (for NextAuth sessions and projects)
 - Google Gemini API key (for embeddings and clustering)
 - GitHub OAuth app (for authentication)
-- Optional: AWS account (for Fargate agent deployment)
 - Optional: Backend service running (if using centralized polling)
 
 ### Installation
@@ -78,15 +76,6 @@ BACKEND_URL=http://localhost:8000
 
 # GitHub (for higher API limits)
 GITHUB_TOKEN=ghp_your_personal_access_token
-
-# AWS (for Fargate agent deployment)
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-ECS_CLUSTER_NAME=soulcaster-cluster
-ECS_TASK_DEFINITION=coding-agent-task
-ECS_SUBNET_IDS=subnet-xxx,subnet-yyy
-ECS_SECURITY_GROUP_IDS=sg-xxx
 
 # Default GitHub repo (for new issues)
 GITHUB_OWNER=your_username
@@ -153,7 +142,6 @@ The dashboard implements its own API routes that interact directly with Redis an
 
 ### Job Management
 - `POST /api/clusters/[id]/start_fix` - Create job and trigger agent
-- `POST /api/trigger-agent` - Trigger agent (local or Fargate)
 
 ### Configuration
 - `GET /api/config/reddit/subreddits` - Get Reddit subreddit config

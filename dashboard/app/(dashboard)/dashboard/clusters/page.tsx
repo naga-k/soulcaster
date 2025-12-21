@@ -15,6 +15,14 @@ type ClusterJobStatus = {
   stats?: Record<string, number>;
 };
 
+/**
+ * Render the Issue Clusters page, showing clustered feedback, job status, and controls to run clustering.
+ *
+ * Displays loading, empty, and error states; lists clusters with source links, status pills, and item counts;
+ * provides a button to trigger a clustering job and shows the latest job status.
+ *
+ * @returns A React element rendering the Issue Clusters page UI.
+ */
 export default function ClustersListPage() {
   const router = useRouter();
   const [clusters, setClusters] = useState<ClusterListItem[]>([]);

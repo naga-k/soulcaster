@@ -14,7 +14,6 @@ Three components sharing Upstash Redis:
 
 1. **Backend** (`/backend`) - FastAPI service for ingestion, clustering, and agent orchestration
 2. **Dashboard** (`/dashboard`) - Next.js 16 (App Router) web UI for triage and management
-3. **Coding Agent** (`/coding-agent`) - Standalone script that fixes issues via E2B sandboxes
 
 ### Tech Stack
 
@@ -65,12 +64,6 @@ npm run lint                      # ESLint
 npm run format                    # Prettier
 npm run type-check                # TypeScript check
 npm test                          # Jest tests
-```
-
-### Coding Agent
-
-```bash
-python coding-agent/fix_issue.py <github-issue-url> --job-id <optional-job-id>
 ```
 
 ## Key Files
@@ -150,7 +143,6 @@ BACKEND_URL=http://localhost:8000
 **Dashboard** (`:3000/api`):
 - `POST /api/clusters/run-vector` - Run vector-based clustering
 - `POST /api/clusters/cleanup` - Merge duplicate clusters
-- `POST /api/trigger-agent` - Trigger coding agent
 
 ## GitHub Authentication
 

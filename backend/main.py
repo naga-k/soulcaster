@@ -148,22 +148,34 @@ GITHUB_SYNC_STATE: Dict[Tuple[str, str], Dict[str, str]] = {}
 
 @app.get("/")
 def read_root():
-    """Basic root endpoint."""
+    """
+    Return a basic service status payload for the root HTTP endpoint.
+    
+    Returns:
+        dict: Payload containing:
+            status (str): "ok" when the service is healthy.
+            service (str): The service identifier ("soulcaster-ingestion").
+    """
     return {"status": "ok", "service": "soulcaster-ingestion"}
 
 
 @app.get("/health")
 def health_check():
     """
-    Health check endpoint for monitoring and load balancers.
-
-    Checks:
-    - Service is running
-    - Storage backend (Redis/in-memory) is accessible
-
+    Report service and storage connectivity status for health monitoring.
+    
+    When healthy, returns a dictionary with keys:
+    - `status`: "healthy"
+    - `service`: service identifier
+    - `environment`: runtime environment
+    - `storage`: "connected" or "disconnected"
+    - `timestamp`: ISO 8601 UTC timestamp
+    
     Returns:
-        200 OK if healthy
-        503 Service Unavailable if storage is down
+        dict: Health payload described above.
+    
+    Raises:
+        HTTPException: With a 503 status and an error payload when the storage check or other internal check fails.
     """
     try:
         environment = os.getenv("ENVIRONMENT", "development")
@@ -1919,18 +1931,17 @@ def list_cluster_job_status(project_id: Optional[str] = Query(None), limit: int 
 @app.get("/clustering/status")
 def clustering_status(project_id: Optional[str] = Query(None)):
     """
-    Report clustering queue status for a project.
+    Report clustering queue status for the specified project.
     
     Parameters:
-        project_id (Optional[str]): Project identifier; if omitted or invalid, a 400 HTTPException is raised.
+        project_id (Optional[str]): Project identifier; if omitted or invalid, a 400 HTTPException is raised and the request is rejected.
     
     Returns:
-        dict: {
-            "pending_unclustered": int,   # number of feedback items awaiting clustering
-            "is_clustering": bool,        # `true` if a clustering job is currently running
-            "last_job": ClusterJob|None,  # the most recent cluster job record or `None`
-            "project_id": str             # normalized project id
-        }
+        dict: A mapping with the following keys:
+            - "pending_unclustered" (int): Number of feedback items awaiting clustering.
+            - "is_clustering" (bool): `true` if a clustering job is currently running, `false` otherwise.
+            - "last_job" (ClusterJob|None): The most recent cluster job record, or `None` if none exist.
+            - "project_id" (str): Normalized project id used for the query.
     
     Raises:
         HTTPException: If `project_id` is missing or invalid.
@@ -1946,12 +1957,22 @@ def clustering_status(project_id: Optional[str] = Query(None)):
 @app.post("/clusters/cleanup")
 def cleanup_duplicate_clusters(project_id: Optional[str] = Query(None)):
     """
-    Merge similar clusters based on centroid similarity.
-
-    Uses Union-Find to group similar clusters transitively,
-    then merges feedback IDs into the kept cluster.
-
-    Threshold: 0.65 (from vector_store.CLEANUP_MERGE_THRESHOLD)
+    Merge clusters whose centroids are similar and remove duplicate clusters within a project.
+    
+    Groups clusters transitively using centroid similarity (threshold from vector_store.CLEANUP_MERGE_THRESHOLD, currently 0.65), selects a kept cluster per group (preferring clusters with status "fixing" or the largest feedback count), merges feedback IDs and recomputes the centroid for the kept cluster, then deletes the other clusters in each group.
+    
+    Parameters:
+        project_id (Optional[str]): Project identifier taken from the request query; required to scope the cleanup.
+    
+    Returns:
+        dict: Summary of the cleanup operation with the following keys:
+            - success (bool): `True` on successful completion.
+            - message (str): Human-readable status message.
+            - total_clusters (int): Number of clusters examined.
+            - duplicate_groups (int): Number of groups containing more than one cluster.
+            - merged_groups (int): Number of groups that were merged (kept one cluster and removed others).
+            - deleted_clusters (int): Number of clusters deleted.
+            - remaining_clusters (int): Number of clusters remaining after deletions.
     """
     from vector_store import find_similar_clusters, CLEANUP_MERGE_THRESHOLD
     import json
@@ -2006,11 +2027,29 @@ def cleanup_duplicate_clusters(project_id: Optional[str] = Query(None)):
     parent = list(range(n))
 
     def find(x):
+        """
+        Finds the representative (root) of element x in the disjoint-set forest and compresses the path.
+        
+        Parameters:
+            x (int): Element identifier whose set representative is requested.
+        
+        Returns:
+            int: The representative (root) of the set containing x. The parent links for x (and intermediate nodes) are updated to point directly to this root.
+        """
         if parent[x] != x:
             parent[x] = find(parent[x])
         return parent[x]
 
     def union(x, y):
+        """
+        Merge the disjoint-set containing x with the disjoint-set containing y.
+        
+        Modifies the union-find parent mapping so that the roots of x and y become part of the same set.
+        
+        Parameters:
+            x: An element (identifier) in the disjoint-set structure.
+            y: Another element (identifier) in the disjoint-set structure.
+        """
         px, py = find(x), find(y)
         if px != py:
             parent[px] = py
@@ -2097,7 +2136,17 @@ def cleanup_duplicate_clusters(project_id: Optional[str] = Query(None)):
 @app.get("/clusters/{cluster_id}/plan")
 def get_cluster_plan(cluster_id: str, project_id: Optional[str] = Query(None)):
     """
-    Retrieve the latest generated coding plan for a cluster.
+    Retrieve the latest coding plan for a cluster.
+    
+    Parameters:
+    	cluster_id (str): ID of the cluster to fetch the plan for.
+    	project_id (Optional[str]): Project scope to validate access; if not provided, a project id is required via query and validated.
+    
+    Returns:
+    	CodingPlan: The most recently stored coding plan for the specified cluster.
+    
+    Raises:
+    	HTTPException: 404 if the cluster does not exist or if no coding plan has been generated for the cluster.
     """
     pid = _require_project_id(project_id)
 
@@ -2466,9 +2515,17 @@ def get_job_log_lines(
     project_id: Optional[str] = Query(None),
 ):
     """
-    Retrieve logs for a job from memory (if running) or Blob (if completed).
-
-    Returns logs from in-memory buffer for running jobs, or from Vercel Blob for completed jobs.
+    Retrieve logs for a job, preferring blob storage for completed jobs and falling back to in-memory logs.
+    
+    Returns:
+        A dictionary containing:
+        - `job_id` (str): The job UUID as a string.
+        - `project_id` (str): The resolved project id.
+        - `source` (str): `"blob"` if logs were fetched from blob storage, `"memory"` if from the in-memory buffer.
+        - `chunks` (List[str]): A list of log chunks; for blob this contains a single entry with the blob contents, for memory it contains either a single concatenated string or is empty.
+    
+    Raises:
+        HTTPException: 404 if the job does not exist or does not belong to the specified project.
     """
     pid = _require_project_id(project_id)
     job = get_job(job_id)

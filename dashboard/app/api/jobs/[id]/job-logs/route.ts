@@ -7,6 +7,12 @@ function backendError(status: number) {
   return status >= 500 ? 502 : status;
 }
 
+/**
+ * Proxy a request for a job's logs to the backend and return the backend response.
+ *
+ * @param params - A promise that resolves to the route parameters object containing the job `id`.
+ * @returns On success, the backend's parsed JSON payload with the backend's HTTP status. On backend errors, a JSON object `{ error: "Failed to fetch job logs", debug: { status, url, response } }` with a mapped status (502 for backend 5xx, otherwise the backend status). Returns `{ error: "project_id is required" }` with status 400 if the project ID is missing, `{ error: "Backend request timed out" }` with status 503 on timeout, and `{ error: "Failed to fetch job logs" }` with status 500 for other failures.
+ */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -45,4 +51,3 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Failed to fetch job logs' }, { status: 500 });
   }
 }
-

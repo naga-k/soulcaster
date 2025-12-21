@@ -41,17 +41,24 @@ class Colors:
 
 
 def print_colored(message: str, color: str):
-    """Print colored message to terminal."""
+    """
+    Prints a message to the terminal using the specified ANSI color code.
+    
+    Parameters:
+        message (str): The text to print.
+        color (str): ANSI color code prefix to apply (e.g., Colors.RED, Colors.GREEN).
+    """
     print(f"{color}{message}{Colors.END}")
 
 
 def is_production_url(url: str) -> bool:
     """
-    Check if a URL looks like a production instance.
-
-    Production indicators:
-    - Contains "prod" in the URL
-    - Contains "production" in the URL
+    Determine whether a URL appears to point to a production instance.
+    
+    A URL is considered production if it contains the substrings "prod" or "production" (case-insensitive).
+    
+    Returns:
+        `True` if the URL appears to be a production URL, `False` otherwise.
     """
     if not url:
         return False
@@ -61,13 +68,15 @@ def is_production_url(url: str) -> bool:
 
 def validate_environment() -> tuple[str, str]:
     """
-    Validate that we're using DEV credentials, not PROD.
-
+    Ensure required Upstash REST credentials are present and reference a non-production environment.
+    
+    Checks that UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set, verifies the REST URL does not appear to be a production URL, and ensures ENVIRONMENT is not set to "production". 
+    
     Returns:
-        tuple: (rest_url, rest_token)
-
+        tuple[str, str]: The Upstash REST URL and REST token.
+    
     Raises:
-        ValueError: If PROD credentials are detected or credentials are missing.
+        ValueError: If required environment variables are missing, the REST URL appears to be production, or ENVIRONMENT is "production".
     """
     rest_url = os.getenv("UPSTASH_REDIS_REST_URL")
     rest_token = os.getenv("UPSTASH_REDIS_REST_TOKEN")
@@ -102,15 +111,15 @@ def validate_environment() -> tuple[str, str]:
 
 def scan_keys(base_url: str, token: str, pattern: str = "*") -> List[str]:
     """
-    Scan Redis for keys matching a pattern using Upstash REST API.
-
-    Args:
-        base_url: Upstash REST URL
-        token: Upstash REST token
-        pattern: Redis key pattern (default: "*")
-
+    Return all Redis keys that match the given pattern by scanning the Upstash REST API.
+    
+    Parameters:
+        base_url (str): Upstash REST endpoint URL.
+        token (str): Bearer token for Upstash REST API authentication.
+        pattern (str): Redis key pattern to match (e.g., "prefix:*"). Defaults to "*".
+    
     Returns:
-        List of matching keys
+        List[str]: Matching Redis keys.
     """
     keys = []
     cursor = "0"
@@ -136,15 +145,13 @@ def scan_keys(base_url: str, token: str, pattern: str = "*") -> List[str]:
 
 def delete_keys(base_url: str, token: str, keys: List[str]) -> int:
     """
-    Delete keys from Redis in batches.
-
-    Args:
-        base_url: Upstash REST URL
-        token: Upstash REST token
-        keys: List of keys to delete
-
+    Delete multiple Redis keys via the Upstash REST API in batches.
+    
+    Parameters:
+    	keys (List[str]): Redis key names to delete.
+    
     Returns:
-        Number of keys deleted
+    	int: Total number of keys deleted.
     """
     if not keys:
         return 0
@@ -169,9 +176,13 @@ def delete_keys(base_url: str, token: str, keys: List[str]) -> int:
 
 def reset_vector_db():
     """
-    Reset the Upstash Vector database.
-
-    This deletes all embeddings from the vector store.
+    Reset the Upstash Vector database by deleting all stored embeddings.
+    
+    If vector REST credentials are missing the function prints a warning and returns without taking action.
+    Raises a ValueError if the configured vector URL appears to be a production URL to prevent accidental deletion.
+    
+    Raises:
+        ValueError: If the vector URL looks like a production endpoint.
     """
     vector_url = os.getenv("UPSTASH_VECTOR_REST_URL")
     vector_token = os.getenv("UPSTASH_VECTOR_REST_TOKEN")
@@ -200,7 +211,14 @@ def reset_vector_db():
 
 
 def main():
-    """Main entry point."""
+    """
+    Run the CLI to safely reset development data in Upstash-backed Redis and optionally reset the vector database.
+    
+    Parses CLI flags `--force` (skip confirmation) and `--skip-vector` (skip vector reset), validates that DEV credentials/URLs are being used, scans for predefined Redis key patterns, prompts for explicit confirmation unless forced, deletes found keys in batches, and optionally resets the Upstash Vector store.
+    
+    Returns:
+        int: Exit code where `0` indicates success and `1` indicates an aborted operation or an error (including safety-check failures).
+    """
     parser = argparse.ArgumentParser(description="Reset DEV data in Upstash Redis")
     parser.add_argument(
         "--force",

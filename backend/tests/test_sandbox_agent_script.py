@@ -151,7 +151,9 @@ class TestMarkdownWrapperStripping:
     """Test markdown code block wrapper removal."""
 
     def test_strip_markdown_wrapper(self):
-        """Strip ```markdown wrapper from start."""
+        """
+        Remove leading and trailing Markdown code-fence wrappers (``` or ```markdown) so only the inner content remains.
+        """
         text = "```markdown\n## Summary\nThis is content\n```"
 
         if text.startswith("```markdown"):
@@ -202,4 +204,3 @@ class TestMarkdownWrapperStripping:
             text = text[:-3].strip()
 
         assert text == "## Summary\nThis is content"
-

@@ -18,17 +18,19 @@ BLOB_TOKEN = os.getenv("BLOB_READ_WRITE_TOKEN") or os.getenv("soulcaster_agent_l
 
 def upload_job_logs_to_blob(job_id: UUID, logs: str) -> str:
     """
-    Upload job logs to Vercel Blob storage.
-
-    Args:
-        job_id: UUID of the job
-        logs: Complete log content as string
-
+    Upload logs for a job to Vercel Blob storage.
+    
+    Parameters:
+        job_id (UUID): Identifier of the job; used to name the blob as "logs/{job_id}.txt".
+        logs (str): Complete log content to upload.
+    
     Returns:
-        str: URL of the uploaded blob
-
+        blob_url (str): URL of the uploaded blob.
+    
     Raises:
-        Exception: If upload fails
+        ValueError: If the BLOB_READ_WRITE_TOKEN environment variable is not set.
+        ImportError: If the required `vercel_blob` package is not installed.
+        Exception: Any exception raised during the upload operation is propagated.
     """
     if not BLOB_TOKEN:
         raise ValueError("BLOB_READ_WRITE_TOKEN environment variable not set")
@@ -58,16 +60,10 @@ def upload_job_logs_to_blob(job_id: UUID, logs: str) -> str:
 
 def fetch_job_logs_from_blob(blob_url: str) -> str:
     """
-    Fetch job logs from Vercel Blob storage.
-
-    Args:
-        blob_url: URL of the blob to fetch
-
+    Retrieve job logs from a Vercel Blob URL.
+    
     Returns:
-        str: Log content
-
-    Raises:
-        Exception: If fetch fails
+        str: The blob's content decoded as text.
     """
     try:
         import requests
@@ -83,13 +79,10 @@ def fetch_job_logs_from_blob(blob_url: str) -> str:
 
 def delete_job_logs_from_blob(blob_url: str) -> bool:
     """
-    Delete job logs from Vercel Blob storage.
-
-    Args:
-        blob_url: URL of the blob to delete
-
+    Delete job logs stored in Vercel Blob at the specified blob URL.
+    
     Returns:
-        bool: True if deletion succeeded, False otherwise
+        `true` if the blob was deleted, `false` otherwise.
     """
     if not BLOB_TOKEN:
         logger.warning("BLOB_READ_WRITE_TOKEN not set, cannot delete blob")

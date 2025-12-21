@@ -4,8 +4,11 @@ import { requireProjectId } from '@/lib/project';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 /**
- * Cleanup duplicate clusters by proxying to backend
- * POST /api/clusters/cleanup
+ * Proxy a cleanup request to the backend to remove duplicate clusters for the current project.
+ *
+ * Proxies a POST to the backend cleanup endpoint using the project ID derived from the incoming request.
+ *
+ * @returns The backend JSON response on success. On failure, a JSON object with `success: false` and an `error` message (and optional `details`), returned with the corresponding HTTP status.
  */
 export async function POST(request: Request) {
   try {

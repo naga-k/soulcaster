@@ -28,7 +28,24 @@ def _get_client():
 
 def generate_plan(cluster: IssueCluster, feedback_items: list[FeedbackItem]) -> CodingPlan:
     """
-    Generate a CodingPlan for the given cluster and feedback items using Gemini.
+    Generate a high-level coding plan for an issue cluster from user feedback using Gemini.
+    
+    Parameters:
+        cluster (IssueCluster): The issue cluster to generate a plan for.
+        feedback_items (list[FeedbackItem]): Ordered user feedback entries relevant to the cluster.
+    
+    Returns:
+        CodingPlan: A plan containing a new UUID, the cluster ID, a short product-facing title,
+        a single-block description describing problem, expected behavior, and (optionally)
+        acceptance criteria, and created/updated UTC timestamps.
+    
+    Behavior:
+        - If the Gemini API key is missing, returns a placeholder plan indicating automatic
+          plan generation failed (title prefixed with "Fix:" and a description noting the failure).
+        - If generation succeeds, returns a CodingPlan populated from the model's parsed
+          title and description.
+        - If generation raises an exception, logs the error and returns a fallback plan whose
+          title indicates the error and whose description contains the exception message.
     """
     client = _get_client()
     if not client:

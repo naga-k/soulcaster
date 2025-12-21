@@ -652,10 +652,13 @@ if __name__ == "__main__":
 
 class SandboxKilocodeRunner(AgentRunner):
     async def _archive_logs_to_blob(self, job_id: UUID) -> bool:
-        """Archive job logs from memory to Blob storage.
-
+        """
+        Archive in-memory logs for a job to blob storage and attach the resulting blob URL to the job record.
+        
+        If logs exist for the given job, they are concatenated, uploaded to blob storage, the job is updated with the blob URL, and the in-memory logs are cleared. If no logs are present or an error occurs, no job update is performed.
+        
         Returns:
-            bool: True if archival succeeded, False otherwise.
+            True if logs were found and successfully uploaded and recorded on the job, False otherwise.
         """
         try:
             logs = job_logs_manager.get_logs(job_id)
@@ -680,6 +683,25 @@ class SandboxKilocodeRunner(AgentRunner):
         cluster: IssueCluster,
         github_token: Optional[str] = None
     ) -> None:
+        """
+        Start and run a Kilocode agent inside an external sandbox, stream and persist its logs, and update job and cluster state based on execution results.
+        
+        Parameters:
+            job (AgentJob): The agent job record to update with status, logs, and PR URL.
+            plan (CodingPlan): The coding plan to execute inside the sandbox; written to the sandbox workspace.
+            cluster (IssueCluster): The issue cluster whose metadata (e.g., repo URL, PR state) may be read and updated.
+            github_token (Optional[str]): OAuth token used to authenticate GitHub operations inside the sandbox; required for repository access and PR creation.
+        
+        Behavior:
+            - Creates a temporary sandbox configured from environment variables and the provided plan.
+            - Streams stdout/stderr from the agent process into the job's log stream with buffered flushing and optional console mirroring.
+            - Detects and persists a PR URL signaled by the agent script; updates the associated cluster status.
+            - Marks the job as success on exit code 0 (or failed on non-zero/exception), and attempts to archive logs to blob storage.
+            - Ensures sandbox termination unless E2B_KEEP_SANDBOX is enabled.
+        
+        Exceptions:
+            - Does not raise; failures are recorded to the job/cluster state and logged.
+        """
         if not AsyncSandbox:
             logger.error("e2b SDK not installed. Cannot run SandboxKilocodeRunner.")
             await self._fail_job(job.id, "e2b SDK missing")
@@ -764,6 +786,14 @@ class SandboxKilocodeRunner(AgentRunner):
              mirror = os.getenv("JOB_LOG_MIRROR_TO_CONSOLE", "").lower() in {"1", "true", "yes"}
 
              async def flush_logs(force: bool = False) -> None:
+                 """
+                 Flush buffered log lines to the persistent job log storage.
+                 
+                 When the buffer exceeds configured size or enough time has passed, or when `force` is True, this function writes the accumulated log chunk to job_logs_manager for the current job and resets the in-memory buffer and timers.
+                 
+                 Parameters:
+                 	force (bool): If True, flush immediately regardless of buffer size or elapsed time.
+                 """
                  nonlocal buffer_chars, buffer_lines, last_flush
                  now = time.monotonic()
                  if not force and buffer_chars < max_buffer_chars and (now - last_flush) < flush_interval_s:
@@ -781,6 +811,12 @@ class SandboxKilocodeRunner(AgentRunner):
                  job_logs_manager.append_log(job.id, chunk)
 
              async def buffered_log(message: str) -> None:
+                 """
+                 Append a log line to the job's in-memory buffer and schedule it to be flushed.
+                 
+                 Parameters:
+                     message (str): Log text to append; a newline will be added if one is not present.
+                 """
                  nonlocal buffer_chars
                  line = message if message.endswith("\n") else f"{message}\n"
                  async with buffer_lock:
@@ -916,6 +952,15 @@ class SandboxKilocodeRunner(AgentRunner):
 
     async def _log(self, job_id: UUID, message: str):
         # Persist to job log stream/list and optionally mirror to console.
+        """
+        Persist a single log line to the job's centralized log stream and optionally mirror it to the console.
+        
+        Appends the provided message (ensuring it ends with a newline) to the job's log storage and, when console mirroring is enabled via the JOB_LOG_MIRROR_TO_CONSOLE environment variable, writes the log to the application logger.
+        
+        Parameters:
+        	job_id (UUID): Identifier of the job whose log stream will receive the message.
+        	message (str): The log message to append; a trailing newline will be added if not present.
+        """
         mirror = os.getenv("JOB_LOG_MIRROR_TO_CONSOLE", "").lower() in {"1", "true", "yes"}
         if mirror:
             logger.info("[sandbox_kilo][job=%s] %s", job_id, message.rstrip())
@@ -923,6 +968,13 @@ class SandboxKilocodeRunner(AgentRunner):
         job_logs_manager.append_log(job_id, line)
 
     async def _fail_job(self, job_id: UUID, error: str):
+        """
+        Mark a job as failed, append the error message to its logs, update the associated cluster status, and attempt to archive the job logs to blob storage.
+        
+        Parameters:
+            job_id (UUID): Identifier of the job to mark as failed.
+            error (str): Error message to append to the job logs and record as the cluster failure reason.
+        """
         job = await asyncio.to_thread(get_job, job_id)
         current_logs = (job.logs or "") if job is not None else ""
         await asyncio.to_thread(

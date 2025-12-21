@@ -15,6 +15,14 @@ import {
   type TabId,
 } from './components';
 
+/**
+ * Renders the Cluster Detail page and manages its data fetching, user actions, tabs, and job log drawer.
+ *
+ * The component loads cluster details, coding plan, and fix jobs; provides actions to generate a plan and start fixes;
+ * polls cluster and job status while operations are active; and fetches and tails job logs in a drawer.
+ *
+ * @returns The Cluster Detail page UI as a React element
+ */
 export default function ClusterDetailPage() {
   const params = useParams();
   const clusterId = params.id as string;

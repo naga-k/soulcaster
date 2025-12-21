@@ -177,21 +177,13 @@ def _run_vector_clustering(
     project_id: str,
 ) -> dict:
     """
-    Run vector-based clustering using Upstash Vector for ANN search.
-
-    Algorithm:
-    1. Generate embeddings for all items (with batching)
-    2. For each item, query vector DB for similar items
-    3. If similar item is already clustered -> join that cluster
-    4. If similar items are unclustered -> create new cluster with all of them
-    5. If no similar items -> create new single-item cluster
-    6. Store embeddings in vector DB with cluster assignments
-
+    Cluster feedback items by their vector embeddings using the configured vector store and create or update IssueCluster records accordingly.
+    
     Returns:
-        dict with keys:
-        - new_clusters: list of newly created IssueCluster objects
-        - updated_clusters: list of cluster IDs that had items added
-        - items_clustered: total items processed
+        dict: A mapping with keys:
+            - new_clusters (List[IssueCluster]): newly created cluster objects persisted to storage.
+            - updated_clusters (List[str]): cluster IDs that had items added.
+            - items_clustered (int): number of feedback items processed.
     """
     if not items:
         return {"new_clusters": [], "updated_clusters": [], "items_clustered": 0}
@@ -296,13 +288,12 @@ def _run_vector_clustering(
 
 async def maybe_start_clustering(project_id: str) -> ClusterJob:
     """
-    Create a new clustering job for the given project, attempt to acquire the per-project clustering lock, and schedule the background clustering runner if the lock is obtained.
+    Create and persist a ClusterJob for the given project and, if a per-project lock is acquired, schedule the background clustering runner.
     
-    Parameters:
-        project_id (str): Project identifier for which to create and (if possible) start clustering.
+    If the project-level lock cannot be obtained the job is marked as failed with an explanatory error and finished timestamp; if the lock is obtained a background task is started and the job remains pending.
     
     Returns:
-        ClusterJob: The persisted ClusterJob record. When the lock is already held the job is immediately marked failed with an explanatory error; otherwise a background task is launched to process clustering work.
+        ClusterJob: The persisted ClusterJob record reflecting the outcome described above.
     """
     job_id = str(uuid4())
     now = datetime.now(timezone.utc)
@@ -336,13 +327,9 @@ async def maybe_start_clustering(project_id: str) -> ClusterJob:
 
 async def run_clustering_job(project_id: str, job_id: str):
     """
-    Perform clustering for a project's unclustered feedback and update the corresponding ClusterJob.
+    Run the clustering job for a project and update its ClusterJob record.
     
-    This function marks the job as running, retrieves unclustered feedback for the given project, and either:
-    - In testing mode (no external embedding keys or running under pytest): optionally creates a single cluster when no clusters exist and removes processed items from the unclustered batch.
-    - In production mode: prepares payloads, runs the clustering pipeline with embeddings, persists resulting IssueCluster records, and removes processed items from the unclustered batch.
-    
-    On success the ClusterJob is updated with status "succeeded" and statistics (clustered count, new_clusters, singletons). On error the ClusterJob is updated with status "failed" and the error message. The per-project cluster lock is released in all cases.
+    Executes clustering for all unclustered feedback in the specified project: marks the job as running, processes unclustered items either with a deterministic testing-mode shortcut (no external embedding keys or under pytest) or with the production vector-based pipeline, persists any created IssueCluster records, removes processed items from the unclustered batch, and updates the ClusterJob with final status, finish time, and statistics. On success the job is set to "succeeded" and stats include keys such as `clustered`, `new_clusters`, and `updated_clusters` (or `singletons` in testing mode); on error the job is set to "failed" with the error message. The per-project cluster lock is released regardless of outcome.
     """
     start = datetime.now(timezone.utc)
     update_cluster_job(project_id, job_id, status="running", started_at=start)

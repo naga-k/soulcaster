@@ -12,7 +12,11 @@ class TestJobLogsManager:
     """Tests for in-memory job logs manager."""
 
     def test_append_and_get_logs(self):
-        """Test basic append and get operations."""
+        """
+        Verify that appended log lines for a job are stored and retrieved in order.
+        
+        Also confirms the logs are initially empty and clears stored logs during cleanup.
+        """
         job_id = uuid4()
 
         # Initially empty

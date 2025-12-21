@@ -30,7 +30,15 @@ def teardown_function():
 
 
 def _create_test_fixtures(project_id: str):
-    """Create test cluster and job fixtures."""
+    """
+    Create and persist a test IssueCluster and an associated AgentJob for the given project.
+    
+    Parameters:
+        project_id (str): ID of the project to associate the fixtures with.
+    
+    Returns:
+        (IssueCluster, AgentJob): The created cluster and its associated job.
+    """
     now = datetime.now(timezone.utc)
 
     cluster = IssueCluster(
@@ -221,6 +229,15 @@ class TestSandboxJobCompletionWithBlob:
         # Mock sandbox.commands.run to add logs and return success
         async def mock_run(*args, **kwargs):
             # Simulate agent writing logs
+            """
+            Simulates a sandbox run that emits two stdout log lines via a provided callback.
+            
+            Parameters:
+                on_stdout (callable, optional): A callback that will be invoked with each stdout line (str). If not provided, no output is emitted.
+            
+            Returns:
+                mock_proc: A mock process-like object representing the started process.
+            """
             on_stdout = kwargs.get("on_stdout")
             if on_stdout:
                 on_stdout("Agent starting...\n")
@@ -324,6 +341,16 @@ class TestBlobArchivalIntegration:
         archived_content = None
 
         def capture_upload(jid, content):
+            """
+            Capture an uploaded job log for test inspection and provide a preconfigured blob URL.
+            
+            Parameters:
+                jid (str): Job identifier associated with the upload.
+                content (bytes | str): The data being uploaded for the job logs.
+            
+            Returns:
+                blob_url (str): The preconfigured URL representing the uploaded blob.
+            """
             nonlocal archived_content
             archived_content = content
             return blob_url
