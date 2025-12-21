@@ -520,6 +520,22 @@ class InMemoryStore:
         self.issue_clusters[cluster_id] = updated_cluster
         return updated_cluster
 
+    def add_feedback_to_cluster(self, project_id: str, cluster_id: str, feedback_id: str) -> None:
+        """Add a feedback ID to an existing cluster's feedback_ids list."""
+        cluster = self.issue_clusters.get(cluster_id)
+        if not cluster:
+            raise KeyError(f"Cluster {cluster_id} not found")
+        if project_id and str(cluster.project_id) != str(project_id):
+            raise KeyError(f"Cluster {cluster_id} not found for project {project_id}")
+        if feedback_id not in cluster.feedback_ids:
+            cluster.feedback_ids.append(feedback_id)
+
+    def delete_cluster(self, project_id: str, cluster_id: str) -> None:
+        """Delete a cluster by ID."""
+        cluster = self.issue_clusters.get(cluster_id)
+        if cluster and (not project_id or str(cluster.project_id) == str(project_id)):
+            del self.issue_clusters[cluster_id]
+
     def clear_clusters(self, project_id: Optional[str] = None):
         """
         Remove stored issue clusters. If project_id is provided, remove clusters for that project;
@@ -1748,6 +1764,19 @@ class RedisStore:
         updated = cluster.model_copy(update=updates)
         return self.add_cluster(updated)
 
+    def add_feedback_to_cluster(self, project_id: str, cluster_id: str, feedback_id: str) -> None:
+        """Add a feedback ID to an existing cluster's items set."""
+        items_key = self._cluster_items_key(project_id, cluster_id)
+        self._sadd(items_key, str(feedback_id))
+
+    def delete_cluster(self, project_id: str, cluster_id: str) -> None:
+        """Delete a cluster and its items set."""
+        cluster_key = self._cluster_key(project_id, cluster_id)
+        items_key = self._cluster_items_key(project_id, cluster_id)
+        all_key = self._cluster_all_key(project_id)
+        self._delete(cluster_key, items_key)
+        self._srem(all_key, cluster_id)
+
     def clear_clusters(self, project_id: Optional[str] = None):
         """
         Remove cluster records. If project_id is provided, remove that project's clusters;
@@ -2835,6 +2864,23 @@ def get_all_clusters(project_id: Optional[str] = None) -> List[IssueCluster]:
 
 def update_cluster(project_id: str, cluster_id: str, **updates) -> IssueCluster:
     return _STORE.update_cluster(project_id, cluster_id, **updates)
+
+
+def add_feedback_to_cluster(cluster_id: str, feedback_id: str, project_id: Optional[str] = None) -> None:
+    """Add a feedback ID to an existing cluster."""
+    if project_id is None:
+        # Try to find the cluster's project_id
+        cluster = get_cluster_by_id(cluster_id)
+        if cluster:
+            project_id = str(cluster.project_id)
+        else:
+            raise KeyError(f"Cluster {cluster_id} not found")
+    _STORE.add_feedback_to_cluster(project_id, cluster_id, feedback_id)
+
+
+def delete_cluster(project_id: str, cluster_id: str) -> None:
+    """Delete a cluster by ID."""
+    _STORE.delete_cluster(project_id, cluster_id)
 
 
 def clear_clusters(project_id: Optional[str] = None):
