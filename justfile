@@ -30,13 +30,13 @@ dev-reset-force:
     python scripts/reset_dev_data.py --force
 
 # ============================================================================
-# Docker & Deployment
+# Docker (Local Testing Only - Production uses hosting platform)
 # ============================================================================
 
-# Build backend Docker image
+# Build backend Docker image (local testing)
 docker-build:
-    @echo "🐳 Building backend Docker image..."
-    @echo "Using unified .env from project root"
+    @echo "🐳 Building backend Docker image (local test)..."
+    @echo "ℹ️  Production builds happen automatically on hosting platform"
     cd backend && docker build -t soulcaster-backend .
 
 # Run backend in Docker with unified .env (local test)
@@ -49,6 +49,7 @@ docker-run:
 docker-up:
     @echo "🐳 Starting backend + Redis with Docker Compose..."
     @echo "Using unified .env from project root (../.env)"
+    @echo "ℹ️  This is for local testing - production uses hosting platform"
     cd backend && docker-compose up --build
 
 # Stop Docker Compose services
