@@ -176,7 +176,7 @@ def test_quota_check_with_cuid_project_id():
     # Should succeed, not return 404
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["success"] is True
     assert data["project_id"] == project_id
 
 
@@ -210,8 +210,8 @@ def test_github_sync_with_cuid_project_id(monkeypatch):
     def mock_fetch_issues(*args, **kwargs):
         return []
 
-    import github_client
-    monkeypatch.setattr(github_client, "fetch_repo_issues", mock_fetch_issues)
+    import main as backend_main
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # Try GitHub sync with the CUID project_id
     response = client.post(
@@ -223,7 +223,7 @@ def test_github_sync_with_cuid_project_id(monkeypatch):
     # Should succeed, not return 404
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["success"] is True
 
 
 def test_end_to_end_dashboard_backend_sync():

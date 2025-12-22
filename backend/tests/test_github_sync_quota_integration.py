@@ -68,7 +68,7 @@ def test_github_sync_with_cuid_finds_project(cuid_project, monkeypatch):
     project_id = cuid_project["project_id"]
 
     # Mock GitHub API to return sample issues
-    def mock_fetch_issues(repo_name, state="open", since=None, token=None):
+    def mock_fetch_issues(owner, repo, since=None, token=None, **kwargs):
         return [
             {
                 "id": 123,
@@ -86,8 +86,8 @@ def test_github_sync_with_cuid_finds_project(cuid_project, monkeypatch):
             }
         ]
 
-    import github_client
-    monkeypatch.setattr(github_client, "fetch_repo_issues", mock_fetch_issues)
+    import main as backend_main
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # Perform GitHub sync with CUID project_id
     response = client.post(
@@ -99,8 +99,8 @@ def test_github_sync_with_cuid_finds_project(cuid_project, monkeypatch):
     # Should succeed, not 404
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
-    assert data["ingested"] == 1
+    assert data["success"] is True
+    assert data["new_issues"] == 1
 
 
 def test_quota_check_during_github_sync(cuid_project, monkeypatch):
@@ -114,7 +114,7 @@ def test_quota_check_during_github_sync(cuid_project, monkeypatch):
     user_id = cuid_project["user_id"]
 
     # Mock GitHub API to return multiple issues
-    def mock_fetch_issues(repo_name, state="open", since=None, token=None):
+    def mock_fetch_issues(owner, repo, since=None, token=None, **kwargs):
         return [
             {
                 "id": i,
@@ -133,8 +133,8 @@ def test_quota_check_during_github_sync(cuid_project, monkeypatch):
             for i in range(1, 6)  # 5 issues
         ]
 
-    import github_client
-    monkeypatch.setattr(github_client, "fetch_repo_issues", mock_fetch_issues)
+    import main as backend_main
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # Sync should succeed and quota check should work
     response = client.post(
@@ -145,7 +145,7 @@ def test_quota_check_during_github_sync(cuid_project, monkeypatch):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["ingested"] == 5
+    assert data["new_issues"] == 5
 
     # Verify quota was checked correctly
     count = count_feedback_items_for_user(user_id)
@@ -186,7 +186,8 @@ def test_quota_limit_with_cuid_project_id(cuid_project, monkeypatch):
     # Should return 429 (quota exceeded), not 404 (project not found)
     assert response.status_code == 429
     data = response.json()
-    assert "quota" in data["detail"].lower()
+    detail = data["detail"] if isinstance(data["detail"], str) else str(data["detail"])
+    assert "quota" in detail.lower()
 
 
 def test_partial_batch_with_quota_and_cuid(cuid_project, monkeypatch):
@@ -216,7 +217,7 @@ def test_partial_batch_with_quota_and_cuid(cuid_project, monkeypatch):
         add_feedback_item(item)
 
     # Mock GitHub API to return 10 issues (but only 5 should be ingested)
-    def mock_fetch_issues(repo_name, state="open", since=None, token=None):
+    def mock_fetch_issues(owner, repo, since=None, token=None, **kwargs):
         return [
             {
                 "id": i,
@@ -235,8 +236,8 @@ def test_partial_batch_with_quota_and_cuid(cuid_project, monkeypatch):
             for i in range(1, 11)  # 10 issues
         ]
 
-    import github_client
-    monkeypatch.setattr(github_client, "fetch_repo_issues", mock_fetch_issues)
+    import main as backend_main
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # Sync should succeed with partial ingestion
     response = client.post(
@@ -248,9 +249,9 @@ def test_partial_batch_with_quota_and_cuid(cuid_project, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     # Should only ingest 5 items (hitting the 1500 quota)
-    assert data["ingested"] == 5
-    assert "fetched" in data
-    assert data["fetched"] == 10
+    assert data["new_issues"] == 5
+    assert "total_issues" in data
+    assert data["total_issues"] == 10
 
     # Verify total count is at quota
     count = count_feedback_items_for_user(user_id)
@@ -268,7 +269,7 @@ def test_multiple_syncs_with_same_cuid_project(cuid_project, monkeypatch):
 
     call_count = [0]
 
-    def mock_fetch_issues(repo_name, state="open", since=None, token=None):
+    def mock_fetch_issues(owner, repo, since=None, token=None, **kwargs):
         call_count[0] += 1
         return [
             {
@@ -287,8 +288,8 @@ def test_multiple_syncs_with_same_cuid_project(cuid_project, monkeypatch):
             }
         ]
 
-    import github_client
-    monkeypatch.setattr(github_client, "fetch_repo_issues", mock_fetch_issues)
+    import main as backend_main
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # First sync
     response1 = client.post(
@@ -345,7 +346,7 @@ def test_dashboard_to_github_sync_full_flow():
     # Dashboard uses session's project_id for the sync request
 
     # Mock GitHub API
-    def mock_fetch_issues(repo_name, state="open", since=None, token=None):
+    def mock_fetch_issues(owner, repo, since=None, token=None, **kwargs):
         return [
             {
                 "id": 123,
@@ -363,10 +364,10 @@ def test_dashboard_to_github_sync_full_flow():
             }
         ]
 
-    import github_client
+    import main as backend_main
     import pytest
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(github_client, "fetch_issues_from_repo", mock_fetch_issues)
+    monkeypatch.setattr(backend_main, "fetch_repo_issues", mock_fetch_issues)
 
     # Step 5 & 6: GitHub sync with session's project_id
     github_response = client.post(
@@ -378,8 +379,8 @@ def test_dashboard_to_github_sync_full_flow():
     # CRITICAL: Must succeed, not return 404
     assert github_response.status_code == 200
     data = github_response.json()
-    assert data["status"] == "ok"
-    assert data["ingested"] == 1
+    assert data["success"] is True
+    assert data["new_issues"] == 1
 
     # Verify the issue was ingested with correct project_id
     all_items = get_all_feedback_items()
