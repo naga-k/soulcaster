@@ -182,6 +182,19 @@ class UpstashRESTClient:
         result = self._cmd(*args)
         return result or []
 
+    def zcard(self, key: str) -> int:
+        """
+        Get the cardinality (number of members) of a sorted set.
+
+        Parameters:
+            key (str): Redis key of the sorted set.
+
+        Returns:
+            int: Number of members in the sorted set (0 if key doesn't exist).
+        """
+        result = self._cmd("ZCARD", key)
+        return int(result or 0)
+
     def rpush(self, key: str, *values: str) -> int:
         """
         Append one or more values to the end of a Redis list.
@@ -350,14 +363,16 @@ class InMemoryStore:
         self.unclustered_feedback_ids.setdefault(project_key, set()).add(item.id)
         return item
 
-    def get_feedback_item(self, project_id: str, item_id: UUID) -> Optional[FeedbackItem]:
+    def get_feedback_item(self, project_id: str, item_id: Union[UUID, str]) -> Optional[FeedbackItem]:
         """
         Retrieve a feedback item by its UUID within a project scope.
-        
+
         Returns:
             `FeedbackItem` if an item with the given `item_id` exists and belongs to the project, `None` otherwise.
         """
-        item = self.feedback_items.get(item_id)
+        # Convert string ID to UUID if needed for dictionary lookup
+        lookup_id = UUID(item_id) if isinstance(item_id, str) else item_id
+        item = self.feedback_items.get(lookup_id)
         if item and str(item.project_id) == str(project_id):
             return item
         return None
@@ -405,18 +420,20 @@ class InMemoryStore:
         if key in self.unclustered_feedback_ids:
             self.unclustered_feedback_ids[key].discard(feedback_id)
 
-    def update_feedback_item(self, project_id: str, item_id: UUID, **updates) -> FeedbackItem:
+    def update_feedback_item(self, project_id: str, item_id: Union[UUID, str], **updates) -> FeedbackItem:
         """
         Update mutable fields of a feedback item and return the updated object.
         """
-        existing = self.feedback_items.get(item_id)
+        # Convert string ID to UUID if needed for dictionary lookup
+        lookup_id = UUID(item_id) if isinstance(item_id, str) else item_id
+        existing = self.feedback_items.get(lookup_id)
         if not existing:
             raise KeyError("feedback not found")
         # Verify project scoping: ensure the item belongs to the given project
         if str(existing.project_id) != str(project_id):
             raise KeyError(f"Feedback {item_id} not found for project {project_id}")
         updated = existing.model_copy(update=updates)
-        self.feedback_items[item_id] = updated
+        self.feedback_items[lookup_id] = updated
         return updated
 
     def get_feedback_by_external_id(self, project_id: str, source: str, external_id: str) -> Optional[FeedbackItem]:
@@ -861,13 +878,17 @@ class InMemoryStore:
         self.agent_jobs[job.id] = job
         return job
 
-    def get_job(self, job_id: UUID) -> Optional[AgentJob]:
-        return self.agent_jobs.get(job_id)
+    def get_job(self, job_id: Union[UUID, str]) -> Optional[AgentJob]:
+        # Convert string ID to UUID if needed for dictionary lookup
+        lookup_id = UUID(job_id) if isinstance(job_id, str) else job_id
+        return self.agent_jobs.get(lookup_id)
 
-    def update_job(self, job_id: UUID, **updates) -> AgentJob:
-        job = self.agent_jobs[job_id]
+    def update_job(self, job_id: Union[UUID, str], **updates) -> AgentJob:
+        # Convert string ID to UUID if needed for dictionary lookup
+        lookup_id = UUID(job_id) if isinstance(job_id, str) else job_id
+        job = self.agent_jobs[lookup_id]
         updated_job = job.model_copy(update=updates)
-        self.agent_jobs[job_id] = updated_job
+        self.agent_jobs[lookup_id] = updated_job
         return updated_job
 
     def append_job_log(self, job_id: UUID, message: str) -> None:

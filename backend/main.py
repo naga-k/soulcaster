@@ -13,8 +13,11 @@ import os
 import sys
 import re
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Load .env.local from project root (one level up from backend/)
+env_path = Path(__file__).parent.parent / ".env.local"
+load_dotenv(env_path)
 
 from datetime import datetime, timezone
 import time
@@ -1797,7 +1800,7 @@ class FeedbackUpdate(BaseModel):
 
 @app.put("/feedback/{item_id}")
 def update_feedback_entry(
-    item_id: Union[str, UUID], payload: FeedbackUpdate, project_id: Optional[str] = Query(None)
+    item_id: Union[UUID, str], payload: FeedbackUpdate, project_id: Optional[str] = Query(None)
 ):
     """
     Update mutable fields on a FeedbackItem scoped to a project.
@@ -1817,7 +1820,7 @@ def update_feedback_entry(
 
 
 @app.get("/feedback/{item_id}")
-def get_feedback_by_id(item_id: Union[str, UUID], project_id: Optional[str] = Query(None)):
+def get_feedback_by_id(item_id: Union[UUID, str], project_id: Optional[str] = Query(None)):
     """
     Retrieve a feedback item by its ID within the specified project.
     
@@ -2577,7 +2580,7 @@ def create_job(payload: CreateJobRequest, project_id: Optional[str] = Query(None
 
 
 @app.patch("/jobs/{job_id}")
-def update_job_status(job_id: Union[str, UUID], payload: UpdateJobRequest, project_id: Optional[str] = Query(None)):
+def update_job_status(job_id: Union[UUID, str], payload: UpdateJobRequest, project_id: Optional[str] = Query(None)):
     """
     Update the status and/or logs of an AgentJob scoped to a project.
     
@@ -2613,7 +2616,7 @@ def update_job_status(job_id: Union[str, UUID], payload: UpdateJobRequest, proje
 
 
 @app.get("/jobs/{job_id}")
-def get_job_details(job_id: Union[str, UUID], project_id: Optional[str] = Query(None)):
+def get_job_details(job_id: Union[UUID, str], project_id: Optional[str] = Query(None)):
     """
     Retrieve the specified AgentJob scoped to the given project.
     
@@ -2636,7 +2639,7 @@ def get_job_details(job_id: Union[str, UUID], project_id: Optional[str] = Query(
 
 @app.get("/jobs/{job_id}/logs")
 def get_job_log_lines(
-    job_id: Union[str, UUID],
+    job_id: Union[UUID, str],
     project_id: Optional[str] = Query(None),
 ):
     """
