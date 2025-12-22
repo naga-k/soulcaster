@@ -176,9 +176,9 @@ export default function ClustersListPage() {
       }
       if (errorMsg.includes('fetch') || errorMsg.includes('network')) {
         return {
-          title: 'Connection Error',
-          description: 'Could not connect to the API server.',
-          hint: 'Check that the backend is running on localhost:8000',
+          title: 'Service Unavailable',
+          description: 'Soulcaster services are currently unavailable.',
+          hint: 'Please check your internet connection and try again in a moment.',
         };
       }
       if (errorMsg.includes('401') || errorMsg.includes('unauthorized')) {
