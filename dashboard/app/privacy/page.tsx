@@ -120,7 +120,7 @@ export default function PrivacyPage() {
                   <ul className="list-disc list-inside text-gray-700 mt-2 ml-4 space-y-1">
                     <li>Encrypted JWT session cookies (in your browser)</li>
                     <li>Never logged or exposed in plain text</li>
-                    <li>Passed to our backend only when needed to create PRs</li>
+                    <li>Used only when needed to create pull requests on your behalf</li>
                   </ul>
                 </div>
 
