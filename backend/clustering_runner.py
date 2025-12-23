@@ -207,8 +207,7 @@ def _run_vector_clustering(
     new_clusters: List[IssueCluster] = []
     updated_cluster_ids: set = set()
 
-    # Track cluster assignments for batch vector store update
-    vector_upserts = []
+    # Track cluster assignments for grouped items that need updating
     cluster_assignments = []  # For grouped items
 
     for i, item in enumerate(items):
@@ -259,21 +258,19 @@ def _run_vector_clustering(
                 new_clusters.append(cluster)
                 add_cluster(cluster)
 
-        # Prepare vector store upsert
-        vector_upserts.append({
-            "id": str(item.id),
-            "embedding": embedding,
-            "metadata": FeedbackVectorMetadata(
+        # IMMEDIATELY upsert to vector store so subsequent items can find this one
+        # This fixes the bug where batch processing created individual clusters
+        # because items weren't visible to each other during the loop
+        vector_store.upsert_feedback(
+            id=str(item.id),
+            embedding=embedding,
+            metadata=FeedbackVectorMetadata(
                 title=item.title or "",
                 source=item.source,
                 cluster_id=result.cluster_id,
                 created_at=item.created_at.isoformat() if item.created_at else None,
             ),
-        })
-
-    # Batch upsert to vector store
-    if vector_upserts:
-        vector_store.upsert_feedback_batch(vector_upserts)
+        )
 
     # Update cluster assignments for grouped items
     if cluster_assignments:
