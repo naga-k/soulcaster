@@ -262,7 +262,7 @@ def _run_vector_clustering(
         # This fixes the bug where batch processing created individual clusters
         # because items weren't visible to each other during the loop
         vector_store.upsert_feedback(
-            id=str(item.id),
+            feedback_id=str(item.id),
             embedding=embedding,
             metadata=FeedbackVectorMetadata(
                 title=item.title or "",
@@ -354,60 +354,18 @@ async def run_clustering_job(project_id: str, job_id: str):
             )
             return
 
-        testing_mode = bool(os.getenv("PYTEST_CURRENT_TEST")) or not bool(
-            os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        )
-        logger.info(f"Clustering mode: testing={testing_mode}, has_gemini={bool(os.getenv('GEMINI_API_KEY'))}")
+        # Always use vector-based clustering - no fake test mode
+        result = _run_vector_clustering(items, project_id)
 
-        if testing_mode:
-            # In tests, avoid external embeddings but still drain unclustered feedback to mimic production semantics.
-            # Create a single cluster only if none exist yet. Use Reddit-style title when present.
-            existing_clusters = get_all_clusters(project_id)
-            if not existing_clusters:
-                first = items[0]
-                subreddit = None
-                if isinstance(first.metadata, dict):
-                    subreddit = first.metadata.get("subreddit")
-                title = f"Reddit: r/{subreddit}" if subreddit else first.title
-                summary = first.body[:200] if first.body else "Feedback cluster"
-                github_repo_url = _derive_github_repo_url(items)
-                # Cache distinct sources to avoid expensive per-item lookups in /clusters endpoint
-                sources = sorted({item.source for item in items})
-                cluster = IssueCluster(
-                    id=str(uuid4()),
-                    project_id=first.project_id,
-                    title=title,
-                    summary=summary,
-                    feedback_ids=[str(item.id) for item in items],
-                    status="new",
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                    github_repo_url=github_repo_url,
-                    sources=sources,
-                )
-                grouped_clusters = [cluster]
-                for cluster in grouped_clusters:
-                    add_cluster(cluster)
-            processed_pairs = [(item.id, project_id) for item in items]
-            remove_from_unclustered_batch(processed_pairs)
-            stats = {
-                "clustered": len(items),
-                "new_clusters": 0 if existing_clusters else 1,
-                "singletons": 0,
-            }
-        else:
-            # Use vector-based clustering with Upstash Vector
-            result = _run_vector_clustering(items, project_id)
+        # Remove processed items from unclustered
+        processed_pairs = [(item.id, project_id) for item in items]
+        remove_from_unclustered_batch(processed_pairs)
 
-            # Remove processed items from unclustered
-            processed_pairs = [(item.id, project_id) for item in items]
-            remove_from_unclustered_batch(processed_pairs)
-
-            stats = {
-                "clustered": result["items_clustered"],
-                "new_clusters": len(result["new_clusters"]),
-                "updated_clusters": len(result["updated_clusters"]),
-            }
+        stats = {
+            "clustered": result["items_clustered"],
+            "new_clusters": len(result["new_clusters"]),
+            "updated_clusters": len(result["updated_clusters"]),
+        }
 
         update_cluster_job(
             project_id,

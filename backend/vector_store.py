@@ -472,12 +472,12 @@ def cluster_with_vector_db(
     )
 
     # Debug logging to understand clustering behavior
-    logger.info(f"cluster_with_vector_db: item={feedback_id[:8]}... found {len(similar)} similar items above threshold {threshold}")
+    logger.debug(f"cluster_with_vector_db: item={feedback_id[:8]}... found {len(similar)} similar items above threshold {threshold}")
 
     if len(similar) == 0:
         # No similar items - create new cluster
         cluster_id = str(uuid4())
-        logger.info(f"  -> Creating NEW cluster {cluster_id[:8]}... (no similar items found)")
+        logger.debug(f"  -> Creating NEW cluster {cluster_id[:8]}... (no similar items found)")
         return ClusteringResult(
             feedback_id=feedback_id,
             cluster_id=cluster_id,
@@ -487,12 +487,12 @@ def cluster_with_vector_db(
 
     # Check if any similar item is already clustered
     clustered_items = [s for s in similar if s.metadata and s.metadata.cluster_id]
-    logger.info(f"  -> {len(clustered_items)}/{len(similar)} similar items have cluster_id assigned")
+    logger.debug(f"  -> {len(clustered_items)}/{len(similar)} similar items have cluster_id assigned")
 
     if clustered_items:
         # Join the cluster of the most similar clustered item
         best_match = clustered_items[0]
-        logger.info(f"  -> JOINING existing cluster {best_match.metadata.cluster_id[:8]}... (similarity={best_match.score:.3f})")
+        logger.debug(f"  -> JOINING existing cluster {best_match.metadata.cluster_id[:8]}... (similarity={best_match.score:.3f})")
         return ClusteringResult(
             feedback_id=feedback_id,
             cluster_id=best_match.metadata.cluster_id,  # type: ignore
@@ -503,7 +503,7 @@ def cluster_with_vector_db(
     # All similar items are unclustered - create new cluster and group them
     cluster_id = str(uuid4())
     grouped_ids = [s.id for s in similar]
-    logger.info(f"  -> Creating NEW cluster {cluster_id[:8]}... grouping {len(grouped_ids)} unclustered similar items")
+    logger.debug(f"  -> Creating NEW cluster {cluster_id[:8]}... grouping {len(grouped_ids)} unclustered similar items")
 
     return ClusteringResult(
         feedback_id=feedback_id,
