@@ -87,6 +87,9 @@ async def test_run_clustering_job_writes_clusters(monkeypatch):
     fake_embeddings = np.array([[0.1] * 768, [0.2] * 768])
     monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
 
+    # Mock time.sleep to speed up tests (no need to wait for vector store consistency in tests)
+    monkeypatch.setattr(clustering_runner, "time", MagicMock())
+
     # Mock VectorStore - make items cluster together
     mock_vector_store = MagicMock()
     call_count = [0]
@@ -150,6 +153,9 @@ async def test_run_clustering_job_sets_cluster_repo_url(monkeypatch):
     # Mock embeddings
     fake_embeddings = np.array([[0.1] * 768])
     monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
+
+    # Mock time.sleep to speed up tests
+    monkeypatch.setattr(clustering_runner, "time", MagicMock())
 
     # Mock VectorStore - single item creates new cluster
     mock_vector_store = MagicMock()
@@ -225,6 +231,9 @@ async def test_vector_clustering_upsert_uses_correct_parameter_names(monkeypatch
     # Mock embeddings to avoid Gemini API call
     fake_embeddings = np.array([[0.1] * 768, [0.2] * 768])
     monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
+
+    # Mock time.sleep to speed up tests
+    monkeypatch.setattr(clustering_runner, "time", MagicMock())
 
     # Create a mock VectorStore that tracks calls
     mock_vector_store = MagicMock()

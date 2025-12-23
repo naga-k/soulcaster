@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence
 from uuid import uuid4
@@ -271,6 +272,11 @@ def _run_vector_clustering(
                 created_at=item.created_at.isoformat() if item.created_at else None,
             ),
         )
+
+        # Wait for vector store eventual consistency before processing next item
+        # Upstash Vector takes ~1 second for upserts to become queryable
+        # Without this delay, subsequent items can't find this one during query
+        time.sleep(1.2)  # 1.2 seconds to ensure visibility
 
     # Update cluster assignments for grouped items
     if cluster_assignments:
