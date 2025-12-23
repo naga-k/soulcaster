@@ -74,6 +74,8 @@ def _make_github_feedback(project_id: str, title: str, issue_url: str) -> Feedba
 
 
 async def test_run_clustering_job_writes_clusters(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
     project_id = str(uuid4())
     clear_feedback_items(project_id)
     clear_clusters(project_id)
@@ -81,31 +83,43 @@ async def test_run_clustering_job_writes_clusters(monkeypatch):
     add_feedback_item(_make_feedback(project_id, "Export fails"))
     add_feedback_item(_make_feedback(project_id, "Export timeout"))
 
-    def fake_cluster_issues(issues, **kwargs):
-        """
-        Create a deterministic fake clustering result from a list of issue-like dicts.
-        
-        Parameters:
-            issues (Iterable[Mapping]): Iterable of mappings representing issues; each mapping is expected to contain a "title" key.
-        
-        Returns:
-            dict: A clustering result with keys:
-                - "labels": numpy.ndarray of integer cluster labels (one label per input issue).
-                - "clusters": list of clusters, each cluster is a list of issue indices.
-                - "singletons": list of singleton issue indices.
-                - "texts": list of issue titles extracted from the input.
-        """
-        return {
-            "labels": np.array([0, 0]),
-            "clusters": [[0, 1]],
-            "singletons": [],
-            "texts": [i["title"] for i in issues],
-        }
+    # Mock embeddings
+    fake_embeddings = np.array([[0.1] * 768, [0.2] * 768])
+    monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
 
-    monkeypatch.setattr(clustering_core, "cluster_issues", fake_cluster_issues)
+    # Mock VectorStore - make items cluster together
+    mock_vector_store = MagicMock()
+    call_count = [0]
+    first_cluster_id = [None]
 
-    job = await clustering_runner.maybe_start_clustering(project_id)
-    await clustering_runner.run_clustering_job(project_id, job.id)
+    def mock_find_similar(embedding, top_k=20, min_score=0.0, exclude_ids=None):
+        from vector_store import SimilarFeedback, FeedbackVectorMetadata
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return []  # First item: no similar items
+        else:
+            # Second item: return first item as similar with cluster_id
+            return [SimilarFeedback(
+                id="first-item-id",
+                score=0.95,
+                metadata=FeedbackVectorMetadata(
+                    title="Export fails",
+                    source="manual",
+                    cluster_id=first_cluster_id[0],
+                ),
+            )]
+
+    def mock_upsert(feedback_id, embedding, metadata):
+        if first_cluster_id[0] is None:
+            first_cluster_id[0] = metadata.cluster_id
+
+    mock_vector_store.find_similar = mock_find_similar
+    mock_vector_store.upsert_feedback = mock_upsert
+    mock_vector_store.update_cluster_assignment_batch = MagicMock()
+
+    with patch("clustering_runner.VectorStore", return_value=mock_vector_store):
+        job = await clustering_runner.maybe_start_clustering(project_id)
+        await clustering_runner.run_clustering_job(project_id, job.id)
 
     clusters = get_all_clusters(project_id)
     assert len(clusters) == 1
@@ -119,31 +133,33 @@ async def test_run_clustering_job_writes_clusters(monkeypatch):
 
 
 async def test_run_clustering_job_sets_cluster_repo_url(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
     project_id = str(uuid4())
     clear_feedback_items(project_id)
     clear_clusters(project_id)
 
-    add_feedback_item(
-        _make_github_feedback(
-            project_id,
-            "Export fails",
-            "https://github.com/octocat/Hello-World/issues/1",
-        )
+    # Add only GitHub items to test github_repo_url extraction
+    github_item = _make_github_feedback(
+        project_id,
+        "Export fails",
+        "https://github.com/octocat/Hello-World/issues/1",
     )
-    add_feedback_item(_make_feedback(project_id, "Export timeout"))
+    add_feedback_item(github_item)
 
-    def fake_cluster_issues(issues, **kwargs):
-        return {
-            "labels": np.array([0, 0]),
-            "clusters": [[0, 1]],
-            "singletons": [],
-            "texts": [i["title"] for i in issues],
-        }
+    # Mock embeddings
+    fake_embeddings = np.array([[0.1] * 768])
+    monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
 
-    monkeypatch.setattr(clustering_core, "cluster_issues", fake_cluster_issues)
+    # Mock VectorStore - single item creates new cluster
+    mock_vector_store = MagicMock()
+    mock_vector_store.find_similar.return_value = []  # No similar items
+    mock_vector_store.upsert_feedback = MagicMock()
+    mock_vector_store.update_cluster_assignment_batch = MagicMock()
 
-    job = await clustering_runner.maybe_start_clustering(project_id)
-    await clustering_runner.run_clustering_job(project_id, job.id)
+    with patch("clustering_runner.VectorStore", return_value=mock_vector_store):
+        job = await clustering_runner.maybe_start_clustering(project_id)
+        await clustering_runner.run_clustering_job(project_id, job.id)
 
     clusters = get_all_clusters(project_id)
     assert len(clusters) == 1
@@ -184,3 +200,66 @@ async def test_maybe_start_clustering_respects_lock(monkeypatch):
 
     # Release lock for cleanup
     clustering_runner.release_cluster_lock(project_id, "existing-job")
+
+
+async def test_vector_clustering_upsert_uses_correct_parameter_names(monkeypatch):
+    """
+    Regression test: Verify upsert_feedback is called with correct parameter names.
+
+    This catches bugs where we pass `id=` instead of `feedback_id=` which would
+    cause a TypeError at runtime but slip through mocked tests.
+    """
+    from unittest.mock import MagicMock, patch
+    from vector_store import FeedbackVectorMetadata
+
+    project_id = str(uuid4())
+    clear_feedback_items(project_id)
+    clear_clusters(project_id)
+
+    # Add test items
+    item1 = _make_feedback(project_id, "Login button broken")
+    item2 = _make_feedback(project_id, "Login form not working")
+    add_feedback_item(item1)
+    add_feedback_item(item2)
+
+    # Mock embeddings to avoid Gemini API call
+    fake_embeddings = np.array([[0.1] * 768, [0.2] * 768])
+    monkeypatch.setattr(clustering_core, "embed_texts_gemini", lambda texts: fake_embeddings)
+
+    # Create a mock VectorStore that tracks calls
+    mock_vector_store = MagicMock()
+    mock_vector_store.find_similar.return_value = []  # No similar items found
+
+    # Track upsert_feedback calls to verify parameter names
+    upsert_calls = []
+    def track_upsert(feedback_id, embedding, metadata):
+        """Track that upsert_feedback is called with correct param names."""
+        upsert_calls.append({
+            "feedback_id": feedback_id,
+            "embedding": embedding,
+            "metadata": metadata,
+        })
+    mock_vector_store.upsert_feedback = track_upsert
+    mock_vector_store.update_cluster_assignment_batch = MagicMock()
+
+    # Patch VectorStore constructor in clustering_runner module
+    # Must patch where it's used, not where it's defined
+    with patch("clustering_runner.VectorStore", return_value=mock_vector_store):
+        # Force vector clustering mode by:
+        # 1. Setting GEMINI_API_KEY
+        # 2. Removing PYTEST_CURRENT_TEST (which forces testing mode)
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+        job = await clustering_runner.maybe_start_clustering(project_id)
+        await clustering_runner.run_clustering_job(project_id, job.id)
+
+    # Verify upsert_feedback was called with correct parameter names
+    # If we had used `id=` instead of `feedback_id=`, this would have failed
+    assert len(upsert_calls) == 2, f"Expected 2 upsert calls, got {len(upsert_calls)}"
+
+    # Verify the parameters are correct types
+    for call in upsert_calls:
+        assert isinstance(call["feedback_id"], str), "feedback_id should be a string"
+        assert isinstance(call["embedding"], list), "embedding should be a list"
+        assert isinstance(call["metadata"], FeedbackVectorMetadata), "metadata should be FeedbackVectorMetadata"

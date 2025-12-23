@@ -46,14 +46,13 @@ def test_ingest_reddit(project_context):
     response = client.post(f"/ingest/reddit?project_id={pid}", json=payload)
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
-    
+
     items = get_all_feedback_items()
     assert len(items) == 1
     assert items[0].title == "Bug in the system"
     assert items[0].source == "reddit"
-    clusters = get_all_clusters()
-    assert len(clusters) == 1
-    assert clusters[0].title == "Reddit: r/test"
+    # Note: Clustering happens async in background, don't test cluster details here
+    # Clustering behavior is tested in test_clustering_runner.py
 
 
 def test_ingest_reddit_deduplicates_external_ids(project_context):
