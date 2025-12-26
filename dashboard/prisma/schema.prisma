@@ -56,6 +56,43 @@ model Project {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Users who have this as their default project
   defaultFor User[]  @relation("DefaultProject")
+  // GitHub App installations for this project
+  githubAppInstallations GitHubAppInstallation[]
+}
+
+model GitHubAppInstallation {
+  id                String   @id @default(cuid())
+  projectId         String
+  installationId    Int      @unique
+  accountLogin      String
+  accountType       String
+  targetType        String
+  permissions       Json
+  installedAt       DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  suspendedAt       DateTime?
+
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositories      GitHubAppRepository[]
+
+  @@index([projectId])
+  @@index([installationId])
+}
+
+model GitHubAppRepository {
+  id                String   @id @default(cuid())
+  installationId    String
+  repositoryId      Int      @unique
+  fullName          String
+  private           Boolean  @default(false)
+  enabled           Boolean  @default(true)
+  addedAt           DateTime @default(now())
+
+  installation      GitHubAppInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@index([installationId])
+  @@index([repositoryId])
+  @@index([fullName])
 }
 
 model VerificationToken {

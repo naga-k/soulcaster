@@ -11,4 +11,6 @@ scikit-learn
 packaging
 google-genai
 e2b-code-interpreter
-e2b 
+e2b
+PyJWT>=2.8.0
+cryptography>=41.0.0

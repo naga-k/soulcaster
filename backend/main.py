@@ -951,6 +951,425 @@ async def ingest_github_sync(
     }
 
 
+# GitHub App webhook endpoint
+
+
+@app.post("/ingest/github/webhook")
+async def ingest_github_webhook(
+    request: Request,
+    x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event"),
+    x_github_delivery: Optional[str] = Header(None, alias="X-GitHub-Delivery"),
+):
+    """
+    GitHub App webhook endpoint for real-time issue sync.
+
+    Handles webhook events from GitHub App installations:
+    - issues (opened, edited, closed, reopened, labeled, etc.)
+    - installation (installed, deleted, suspend, unsuspend)
+    - installation_repositories (added, removed)
+
+    Security: HMAC-SHA256 signature verification required.
+
+    Parameters:
+        request: FastAPI request object for reading raw body.
+        x_hub_signature_256: GitHub webhook signature header.
+        x_github_event: GitHub event type (issues, installation, etc.).
+        x_github_delivery: Unique delivery ID for deduplication.
+
+    Returns:
+        dict: Status and processing result.
+
+    Raises:
+        HTTPException: 401 if signature invalid, 400 for bad payloads.
+    """
+    from github_app_client import verify_github_webhook_signature
+    from github_app_helpers import get_project_id_for_installation
+    from store import _redis_client_from_env, _upstash_rest_client_from_env
+
+    # Read raw body for signature verification
+    body = await request.body()
+
+    # Verify webhook signature
+    webhook_secret = os.getenv("GITHUB_APP_WEBHOOK_SECRET")
+    if not webhook_secret:
+        logger.error("GITHUB_APP_WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+    if not verify_github_webhook_signature(body, x_hub_signature_256, webhook_secret):
+        logger.warning(f"GitHub webhook signature verification failed for delivery {x_github_delivery}")
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Deduplicate events using delivery ID
+    if x_github_delivery:
+        redis_client = _redis_client_from_env() or _upstash_rest_client_from_env()
+        if redis_client:
+            dedup_key = f"github:webhook:event:{x_github_delivery}"
+            if redis_client.get(dedup_key):
+                logger.info(f"Duplicate webhook event {x_github_delivery}, skipping")
+                return {"status": "duplicate", "event_id": x_github_delivery}
+            # Mark as seen for 24 hours
+            try:
+                if hasattr(redis_client, 'setex'):
+                    redis_client.setex(dedup_key, 86400, "1")
+                else:
+                    redis_client.set_with_opts(dedup_key, "1", "EX", "86400")
+            except Exception as e:
+                logger.warning(f"Failed to set dedup key: {e}")
+
+    # Parse payload
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON payload: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    logger.info(
+        "GitHub webhook received",
+        extra={
+            "event_type": x_github_event,
+            "delivery_id": x_github_delivery,
+            "action": payload.get("action"),
+        }
+    )
+
+    # Route by event type
+    if x_github_event == "issues":
+        return await _handle_issues_webhook(payload)
+    elif x_github_event == "installation":
+        return await _handle_installation_webhook(payload)
+    elif x_github_event == "installation_repositories":
+        return await _handle_installation_repositories_webhook(payload)
+    else:
+        logger.info(f"Ignoring event type: {x_github_event}")
+        return {"status": "ignored", "event": x_github_event}
+
+
+async def _handle_issues_webhook(payload: dict):
+    """
+    Process GitHub issues webhook event.
+
+    Actions: opened, edited, closed, reopened, labeled, unlabeled, assigned, etc.
+    """
+    from github_client import issue_to_feedback_item
+    from github_app_helpers import get_project_id_for_installation, is_repo_enabled_for_project
+    from store import (
+        get_feedback_by_external_id,
+        add_feedback_item,
+        update_feedback_item,
+        remove_from_unclustered,
+    )
+
+    action = payload.get("action")
+    issue = payload.get("issue")
+    repository = payload.get("repository")
+    installation = payload.get("installation")
+
+    if not issue or not repository or not installation:
+        logger.error("Missing required fields in issues webhook")
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    # Filter out pull requests (they appear in issues endpoint)
+    if issue.get("pull_request"):
+        return {"status": "ignored", "reason": "pull_request"}
+
+    # Get project_id from installation_id
+    installation_id = installation["id"]
+    project_id = get_project_id_for_installation(installation_id)
+
+    if not project_id:
+        logger.warning(f"No project found for installation {installation_id}")
+        return {"status": "ignored", "reason": "no_project_mapping"}
+
+    repo_full_name = repository["full_name"]
+    repository_id = repository["id"]
+    external_id = str(issue["id"])
+
+    # Check if repo is enabled for this project
+    if not is_repo_enabled_for_project(project_id, repository_id):
+        logger.info(f"Repo {repo_full_name} not enabled for project {project_id}")
+        return {"status": "ignored", "reason": "repo_not_enabled"}
+
+    logger.info(
+        f"Processing {action} event for {repo_full_name}#{issue['number']} (project {project_id})"
+    )
+
+    # Handle different actions
+    if action in ["opened", "edited", "reopened", "labeled", "unlabeled", "assigned", "unassigned"]:
+        # Upsert feedback item
+        existing = get_feedback_by_external_id(project_id, "github", external_id)
+
+        if existing:
+            # Update existing issue
+            feedback_item = issue_to_feedback_item(issue, repo_full_name, project_id).model_copy(
+                update={"id": existing.id}
+            )
+            # Update without re-adding to unclustered (prevents duplicate clusters)
+            from store import _STORE
+            if hasattr(_STORE, '_feedback_key'):
+                # RedisStore
+                key = _STORE._feedback_key(project_id, existing.id)
+                _STORE.client.hset(key, "title", feedback_item.title)
+                _STORE.client.hset(key, "body", feedback_item.body)
+                _STORE.client.hset(key, "metadata", json.dumps(feedback_item.metadata))
+                _STORE.client.hset(key, "status", "open" if action == "reopened" else issue.get("state", "open"))
+            else:
+                # InMemoryStore - update directly
+                _STORE.feedback_items[existing.id] = feedback_item
+
+            logger.info(f"Updated issue {repo_full_name}#{issue['number']}")
+            return {"status": "updated", "feedback_id": str(existing.id)}
+        else:
+            # Create new issue
+            feedback_item = issue_to_feedback_item(issue, repo_full_name, project_id)
+            add_feedback_item(feedback_item)
+
+            # Trigger clustering for new items
+            _kickoff_clustering(project_id)
+
+            logger.info(f"Created issue {repo_full_name}#{issue['number']}")
+            return {"status": "created", "feedback_id": str(feedback_item.id)}
+
+    elif action == "closed":
+        # Archive closed issue
+        existing = get_feedback_by_external_id(project_id, "github", external_id)
+        if existing:
+            # Set status to closed and remove from unclustered
+            from store import _STORE
+            if hasattr(_STORE, '_feedback_key'):
+                key = _STORE._feedback_key(project_id, existing.id)
+                _STORE.client.hset(key, "status", "closed")
+            else:
+                if existing.id in _STORE.feedback_items:
+                    _STORE.feedback_items[existing.id].status = "closed"
+
+            remove_from_unclustered(project_id, existing.id)
+            logger.info(f"Archived issue {repo_full_name}#{issue['number']}")
+            return {"status": "archived", "feedback_id": str(existing.id)}
+        else:
+            return {"status": "ignored", "reason": "issue_not_found"}
+
+    elif action == "deleted":
+        # Delete from our system (rare)
+        existing = get_feedback_by_external_id(project_id, "github", external_id)
+        if existing:
+            from store import _STORE
+            if hasattr(_STORE, '_feedback_key'):
+                key = _STORE._feedback_key(project_id, existing.id)
+                _STORE.client.hset(key, "status", "deleted")
+            else:
+                if existing.id in _STORE.feedback_items:
+                    _STORE.feedback_items[existing.id].status = "deleted"
+
+            remove_from_unclustered(project_id, existing.id)
+            logger.info(f"Deleted issue {repo_full_name}#{issue['number']}")
+            return {"status": "deleted", "feedback_id": str(existing.id)}
+
+    return {"status": "processed", "action": action}
+
+
+async def _handle_installation_webhook(payload: dict):
+    """
+    Handle GitHub App installation lifecycle events.
+
+    Actions: created, deleted, suspend, unsuspend
+    """
+    from github_app_helpers import cleanup_installation
+
+    action = payload.get("action")
+    installation = payload.get("installation")
+
+    if not installation:
+        raise HTTPException(status_code=400, detail="Missing installation")
+
+    installation_id = installation["id"]
+
+    if action == "created":
+        # User just installed the app
+        # The dashboard callback will handle storing the installation
+        logger.info(f"New installation: {installation_id}")
+        return {"status": "installation_created", "installation_id": installation_id}
+
+    elif action == "deleted":
+        # User uninstalled the app - clean up Redis cache
+        cleanup_installation(installation_id)
+        logger.info(f"Installation deleted: {installation_id}")
+        return {"status": "installation_deleted", "installation_id": installation_id}
+
+    elif action in ["suspend", "unsuspend"]:
+        # Installation suspended/unsuspended
+        logger.info(f"Installation {action}: {installation_id}")
+        return {"status": f"installation_{action}ed", "installation_id": installation_id}
+
+    return {"status": "processed", "action": action}
+
+
+async def _handle_installation_repositories_webhook(payload: dict):
+    """
+    Handle repository add/remove from GitHub App installation.
+
+    Actions: added, removed
+    """
+    from github_app_helpers import cleanup_repo
+
+    action = payload.get("action")
+    installation = payload.get("installation")
+    repositories_added = payload.get("repositories_added", [])
+    repositories_removed = payload.get("repositories_removed", [])
+
+    if not installation:
+        raise HTTPException(status_code=400, detail="Missing installation")
+
+    installation_id = installation["id"]
+
+    if action == "added":
+        # Repos added to installation - dashboard will handle Prisma updates
+        logger.info(f"Added {len(repositories_added)} repos to installation {installation_id}")
+        return {
+            "status": "repos_added",
+            "installation_id": installation_id,
+            "count": len(repositories_added)
+        }
+
+    elif action == "removed":
+        # Repos removed - clean up Redis cache
+        for repo in repositories_removed:
+            cleanup_repo(repo["id"])
+        logger.info(f"Removed {len(repositories_removed)} repos from installation {installation_id}")
+        return {
+            "status": "repos_removed",
+            "installation_id": installation_id,
+            "count": len(repositories_removed)
+        }
+
+    return {"status": "processed", "action": action}
+
+
+@app.post("/ingest/github/app/sync/{installation_id}")
+async def sync_github_app_installation(
+    installation_id: int,
+    project_id: str = Query(..., description="Project ID to associate with this installation")
+):
+    """
+    Initial sync for a GitHub App installation.
+
+    Fetches all open issues from all enabled repos in the installation.
+    This is called once after a user installs the GitHub App to backfill
+    existing issues. After this, webhooks handle real-time updates.
+
+    Parameters:
+        installation_id (int): GitHub installation ID.
+        project_id (str): Project ID (UUID/CUID) to associate issues with.
+
+    Returns:
+        dict: Sync results with counts per repository.
+    """
+    from github_app_client import fetch_repo_issues_with_installation_token, get_installation_repos
+    from github_client import issue_to_feedback_item
+    from github_app_helpers import is_repo_enabled_for_project
+    from store import get_feedback_by_external_id, add_feedback_item, add_feedback_items_batch
+
+    logger.info(f"Starting initial sync for installation {installation_id}, project {project_id}")
+
+    try:
+        # Get all repos for this installation from GitHub
+        repos = get_installation_repos(installation_id)
+        logger.info(f"Found {len(repos)} repos in installation {installation_id}")
+    except Exception as e:
+        logger.error(f"Failed to fetch installation repos: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch installation: {str(e)}")
+
+    results = []
+    total_new = 0
+    total_updated = 0
+
+    for repo in repos:
+        repo_id = repo["id"]
+        repo_full_name = repo["full_name"]
+
+        # Check if repo is enabled (default to True for initial sync)
+        if not is_repo_enabled_for_project(project_id, repo_id):
+            logger.info(f"Skipping disabled repo {repo_full_name}")
+            continue
+
+        owner, repo_name = repo_full_name.split("/", 1)
+
+        try:
+            # Fetch all open issues from this repo
+            logger.info(f"Fetching open issues from {repo_full_name}")
+            issues = fetch_repo_issues_with_installation_token(
+                installation_id,
+                owner,
+                repo_name,
+                state="open",
+                max_pages=20,
+                max_issues=2000
+            )
+            logger.info(f"Fetched {len(issues)} issues from {repo_full_name}")
+
+            new_count = 0
+            updated_count = 0
+
+            # Check which issues are new vs existing
+            external_ids = [str(issue["id"]) for issue in issues]
+            from store import get_feedback_by_external_ids_batch
+            existing_map = get_feedback_by_external_ids_batch(project_id, "github", external_ids)
+
+            new_items = []
+            for issue in issues:
+                external_id = str(issue["id"])
+                existing = existing_map.get(external_id)
+
+                if existing:
+                    # Issue already exists - skip for initial sync
+                    # (webhooks will handle updates)
+                    updated_count += 1
+                else:
+                    # New issue - create feedback item
+                    feedback_item = issue_to_feedback_item(issue, repo_full_name, project_id)
+                    new_items.append(feedback_item)
+                    new_count += 1
+
+            # Batch add new items
+            if new_items:
+                add_feedback_items_batch(new_items)
+                logger.info(f"Added {len(new_items)} new issues from {repo_full_name}")
+
+            results.append({
+                "repo": repo_full_name,
+                "new_issues": new_count,
+                "existing_issues": updated_count,
+                "total_issues": len(issues)
+            })
+
+            total_new += new_count
+            total_updated += updated_count
+
+        except Exception as e:
+            logger.error(f"Error syncing repo {repo_full_name}: {e}")
+            results.append({
+                "repo": repo_full_name,
+                "error": str(e)
+            })
+
+    # Trigger clustering if new items were added
+    if total_new > 0:
+        _kickoff_clustering(project_id)
+
+    logger.info(
+        f"Initial sync complete for installation {installation_id}: {total_new} new, {total_updated} existing"
+    )
+
+    return {
+        "success": True,
+        "installation_id": installation_id,
+        "project_id": project_id,
+        "total_new_issues": total_new,
+        "total_existing_issues": total_updated,
+        "repositories": results
+    }
+
+
 # Reddit config endpoints (per project)
 
 
