@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import FeedbackCard from './FeedbackCard';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useProject } from '@/contexts/ProjectContext';
@@ -173,10 +174,10 @@ export default function FeedbackList({ refreshTrigger, onRequestShowSources }: F
               ? 'Get started by connecting a feedback source or submitting manual feedback.'
               : `No ${sourceFilter} feedback items yet.`}
           </p>
-          {sourceFilter === 'all' && onRequestShowSources && (
+          {sourceFilter === 'all' && (
             <div className="mt-6">
-              <button
-                onClick={onRequestShowSources}
+              <Link
+                href="/settings/integrations"
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 text-black rounded-full hover:bg-emerald-400 transition-all font-medium shadow-[0_0_15px_rgba(16,185,129,0.3)]"
               >
                 <svg
@@ -193,8 +194,8 @@ export default function FeedbackList({ refreshTrigger, onRequestShowSources }: F
                     d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                   />
                 </svg>
-                Connect GitHub Repository
-              </button>
+                Configure Integrations
+              </Link>
             </div>
           )}
         </div>
