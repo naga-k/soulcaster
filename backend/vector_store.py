@@ -181,12 +181,6 @@ class VectorStore:
 
         self.index = Index(url=url, token=token)
 
-    def _get_namespace(self, project_id: Optional[str] = None):
-        """Get a namespace-scoped index for project isolation."""
-        if project_id:
-            return self.index.namespace(project_id)
-        return self.index
-
     def upsert_feedback(
         self,
         feedback_id: str,
@@ -203,8 +197,7 @@ class VectorStore:
             metadata (FeedbackVectorMetadata): Metadata associated with the feedback.
             project_id (Optional[str]): Project ID for namespace isolation.
         """
-        ns = self._get_namespace(project_id)
-        ns.upsert(
+        self.index.upsert(
             vectors=[
                 {
                     "id": feedback_id,
@@ -216,7 +209,8 @@ class VectorStore:
                         "created_at": metadata.created_at or "",
                     },
                 }
-            ]
+            ],
+            namespace=project_id or "",
         )
 
     def upsert_feedback_batch(
@@ -249,8 +243,7 @@ class VectorStore:
             }
             for item in items
         ]
-        ns = self._get_namespace(project_id)
-        ns.upsert(vectors=vectors)
+        self.index.upsert(vectors=vectors, namespace=project_id or "")
 
     def find_similar(
         self,
@@ -273,12 +266,12 @@ class VectorStore:
         Returns:
             List[SimilarFeedback]: Matching feedback items ordered by similarity.
         """
-        ns = self._get_namespace(project_id)
-        results = ns.query(
+        results = self.index.query(
             vector=embedding,
             top_k=top_k,
             include_metadata=True,
             include_vectors=False,
+            namespace=project_id or "",
         )
 
         exclude_set = set(exclude_ids or [])
@@ -323,12 +316,12 @@ class VectorStore:
             List[SimilarFeedback]: SimilarFeedback objects from the given cluster.
         """
         # Query more items since we'll filter by cluster
-        ns = self._get_namespace(project_id)
-        results = ns.query(
+        results = self.index.query(
             vector=embedding,
             top_k=top_k * 3,
             include_metadata=True,
             include_vectors=False,
+            namespace=project_id or "",
         )
 
         similar = []
@@ -360,9 +353,11 @@ class VectorStore:
         Raises:
             ValueError: If the feedback item is not found.
         """
-        ns = self._get_namespace(project_id)
+        ns = project_id or ""
         # Fetch current vector and metadata
-        existing = ns.fetch(ids=[feedback_id], include_metadata=True, include_vectors=True)
+        existing = self.index.fetch(
+            ids=[feedback_id], include_metadata=True, include_vectors=True, namespace=ns
+        )
 
         if not existing or len(existing) == 0:
             raise ValueError(f"Feedback {feedback_id} not found in vector store")
@@ -380,14 +375,15 @@ class VectorStore:
         }
 
         # Re-upsert with updated metadata
-        ns.upsert(
+        self.index.upsert(
             vectors=[
                 {
                     "id": feedback_id,
                     "vector": item.vector,
                     "metadata": new_metadata,
                 }
-            ]
+            ],
+            namespace=ns,
         )
 
     def update_cluster_assignment_batch(
@@ -400,9 +396,11 @@ class VectorStore:
             assignments (List[Dict[str, str]]): List with "feedback_id" and "cluster_id" keys.
             project_id (Optional[str]): Project ID for namespace isolation.
         """
-        ns = self._get_namespace(project_id)
+        ns = project_id or ""
         feedback_ids = [a["feedback_id"] for a in assignments]
-        existing = ns.fetch(ids=feedback_ids, include_metadata=True, include_vectors=True)
+        existing = self.index.fetch(
+            ids=feedback_ids, include_metadata=True, include_vectors=True, namespace=ns
+        )
 
         updates = []
         for item in existing:
@@ -431,7 +429,7 @@ class VectorStore:
             )
 
         if updates:
-            ns.upsert(vectors=updates)
+            self.index.upsert(vectors=updates, namespace=ns)
 
     def delete_feedback(
         self, feedback_id: str, project_id: Optional[str] = None
@@ -443,8 +441,7 @@ class VectorStore:
             feedback_id (str): Identifier of the feedback item to remove.
             project_id (Optional[str]): Project ID for namespace isolation.
         """
-        ns = self._get_namespace(project_id)
-        ns.delete(ids=[feedback_id])
+        self.index.delete(ids=[feedback_id], namespace=project_id or "")
 
     def delete_feedback_batch(
         self, feedback_ids: List[str], project_id: Optional[str] = None
@@ -456,8 +453,7 @@ class VectorStore:
             feedback_ids (List[str]): List of feedback item IDs to remove.
             project_id (Optional[str]): Project ID for namespace isolation.
         """
-        ns = self._get_namespace(project_id)
-        ns.delete(ids=feedback_ids)
+        self.index.delete(ids=feedback_ids, namespace=project_id or "")
 
     def reset(self) -> None:
         """
