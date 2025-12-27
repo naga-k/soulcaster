@@ -18,10 +18,13 @@ export default function PrsPage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobLogs, setJobLogs] = useState<string | null>(null);
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (signal?: AbortSignal) => {
     if (!currentProjectId) return;
     try {
-      const res = await fetch(`/api/jobs?project_id=${currentProjectId}`);
+      const res = await fetch(`/api/jobs?project_id=${currentProjectId}`, {
+        cache: 'no-store', // Prevent browser caching
+        signal, // Allow request cancellation
+      });
       if (res.ok) {
         const data = await res.json();
         setJobs(data);
@@ -30,6 +33,10 @@ export default function PrsPage() {
         setError('Failed to fetch jobs');
       }
     } catch (err) {
+      // Don't set error if request was aborted
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       console.error('Failed to fetch jobs:', err);
       setError('Failed to fetch jobs. Check your connection.');
     } finally {
@@ -39,17 +46,41 @@ export default function PrsPage() {
 
   useEffect(() => {
     if (!currentProjectId) return;
+
+    // Clear stale state immediately when project changes
+    setJobs([]);
+    setError(null);
+    setLoading(true);
+
+    // Create AbortController to cancel requests on cleanup
+    const abortController = new AbortController();
     let intervalId: NodeJS.Timeout | null = null;
 
     // Await initial fetch before starting interval to avoid race conditions
     const init = async () => {
-      await fetchJobs();
-      // Only start polling after initial fetch completes
-      intervalId = setInterval(fetchJobs, 5000);
+      try {
+        await fetchJobs(abortController.signal);
+        // Only start polling if not aborted
+        if (!abortController.signal.aborted) {
+          intervalId = setInterval(() => {
+            fetchJobs(abortController.signal);
+          }, 5000);
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          // Request was cancelled - this is expected during project switch
+          console.log('[PRsPage] Initial fetch cancelled');
+          return;
+        }
+        console.error('[PRsPage] Error in init:', err);
+      }
     };
 
     init();
+
+    // Cleanup: abort requests and clear interval
     return () => {
+      abortController.abort();
       if (intervalId) clearInterval(intervalId);
     };
   }, [currentProjectId]);
@@ -60,23 +91,35 @@ export default function PrsPage() {
       return;
     }
 
-    let cancelled = false;
+    // Create AbortController to cancel request on cleanup
+    const abortController = new AbortController();
+
     const fetchLogs = async () => {
       try {
-        const res = await fetch(`/api/jobs/${encodeURIComponent(selectedJobId)}/job-logs?project_id=${currentProjectId}&cursor=0&limit=200`);
+        const res = await fetch(
+          `/api/jobs/${encodeURIComponent(selectedJobId)}/job-logs?project_id=${currentProjectId}&cursor=0&limit=200`,
+          {
+            cache: 'no-store', // Prevent browser caching
+            signal: abortController.signal,
+          }
+        );
         if (!res.ok) return;
         const payload = (await res.json()) as JobLogsPayload;
-        if (!cancelled) {
-          setJobLogs(payload.chunks?.join('') || '');
-        }
+        setJobLogs(payload.chunks?.join('') || '');
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          // Request was cancelled - this is expected
+          return;
+        }
         console.error('Failed to fetch job logs:', error);
       }
     };
 
     fetchLogs();
+
+    // Cleanup: abort request
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [selectedJobId, currentProjectId]);
 
