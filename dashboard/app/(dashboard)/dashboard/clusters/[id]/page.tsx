@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useProject } from '@/contexts/ProjectContext';
@@ -28,6 +28,12 @@ export default function ClusterDetailPage() {
   const params = useParams();
   const clusterId = params.id as string;
   const { currentProjectId } = useProject();
+
+  // Keep ref to latest project ID for stable callbacks
+  const projectIdRef = useRef(currentProjectId);
+  useEffect(() => {
+    projectIdRef.current = currentProjectId;
+  }, [currentProjectId]);
 
   // Cluster data state
   const [cluster, setCluster] = useState<ClusterDetail | null>(null);
@@ -114,20 +120,42 @@ export default function ClusterDetailPage() {
 
   const fetchJobLogs = useCallback(
     async (jobId: string) => {
-      if (!currentProjectId) return;
-      const response = await fetch(
-        `/api/jobs/${encodeURIComponent(jobId)}/job-logs?project_id=${currentProjectId}`,
-        {
-          cache: 'no-store', // Prevent browser caching
-        }
-      );
+      // Use ref to get latest project ID without breaking stable callback
+      const projectId = projectIdRef.current;
+      const url = projectId
+        ? `/api/jobs/${encodeURIComponent(jobId)}/job-logs?project_id=${projectId}`
+        : `/api/jobs/${encodeURIComponent(jobId)}/job-logs`;
+
+      console.log('[fetchJobLogs] Fetching logs:', {
+        jobId,
+        projectId,
+        url,
+      });
+
+      const response = await fetch(url, {
+        cache: 'no-store', // Prevent browser caching
+      });
+
+      console.log('[fetchJobLogs] Response:', {
+        status: response.status,
+        ok: response.ok,
+      });
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[fetchJobLogs] Error response:', errorText);
         throw new Error('Failed to fetch logs');
       }
 
       const payload = await response.json();
       const chunks = (payload?.chunks as string[]) || [];
       const source = payload?.source || 'unknown';
+
+      console.log('[fetchJobLogs] Success:', {
+        source,
+        chunkCount: chunks.length,
+        totalLength: chunks.join('').length,
+      });
 
       // Update logs
       setLogText(chunks.join(''));
@@ -138,7 +166,7 @@ export default function ClusterDetailPage() {
       }
       // For memory source, keep current tailing state (controlled by job status polling)
     },
-    [currentProjectId]
+    [] // Empty deps - stable function, uses ref for latest project ID
   );
 
   // Initial data fetch - clear stale state when project changes
@@ -152,6 +180,12 @@ export default function ClusterDetailPage() {
     setLoading(true);
     setError(null);
     setJobsError(null);
+
+    // Clear log drawer state to prevent fetching logs for jobs from old project
+    setLogDrawerOpen(false);
+    setSelectedJobForLogs(null);
+    setLogText('');
+    setIsTailingLogs(false);
 
     fetchCluster();
     fetchPlan();
