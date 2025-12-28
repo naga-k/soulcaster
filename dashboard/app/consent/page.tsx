@@ -10,12 +10,14 @@ export default function ConsentPage() {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) return;
 
     setSubmitting(true);
+    setError(null);
     try {
       const res = await fetch('/api/consent', {
         method: 'POST',
@@ -27,13 +29,12 @@ export default function ConsentPage() {
         // Force session update to refresh consent status in token
         await update();
         router.push('/dashboard');
-        router.refresh();
       } else {
-        alert('Failed to save consent. Please try again.');
+        setError('Failed to save consent. Please try again.');
       }
-    } catch (error) {
-      console.error('Error saving consent:', error);
-      alert('An error occurred. Please try again.');
+    } catch (err) {
+      console.error('Error saving consent:', err);
+      setError('An error occurred. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +75,7 @@ export default function ConsentPage() {
                   <div>
                     <h1 className="text-3xl font-medium tracking-tight text-white">Research Preview</h1>
                     <p className="text-slate-400 font-light">
-                      Welcome{session?.user?.name ? `, ${session.user.name.split(' ')[0]}` : ''}
+                      Welcome{session?.user?.name ? `, ${session.user.name.split(' ')[0] || session.user.name}` : ''}
                     </p>
                   </div>
                 </div>
@@ -117,7 +118,7 @@ export default function ConsentPage() {
                       <li className="flex items-start gap-2 text-left">
                         <span className="text-emerald-500/60">•</span>
                         <span>Read our full{' '}
-                          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-4 transition-colors">
+                          <a href="/privacy" className="text-emerald-400 hover:text-emerald-300 underline underline-offset-4 transition-colors">
                             Privacy Policy
                           </a>
                         </span>
@@ -127,6 +128,13 @@ export default function ConsentPage() {
                 </div>
               </div>
 
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-left">
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
+
               {/* Consent Form */}
               <form onSubmit={handleSubmit} className="space-y-8">
                 <label className="flex items-start gap-4 cursor-pointer group text-left">
@@ -135,7 +143,7 @@ export default function ConsentPage() {
                       type="checkbox"
                       checked={agreed}
                       onChange={(e) => setAgreed(e.target.checked)}
-                      className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-white/20 bg-white/5 transition-all checked:bg-emerald-500 checked:border-emerald-500 focus:outline-none"
+                      className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-white/20 bg-white/5 transition-all checked:bg-emerald-500 checked:border-emerald-500 focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-slate-900"
                     />
                     <svg className="absolute h-5 w-5 text-black pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />
