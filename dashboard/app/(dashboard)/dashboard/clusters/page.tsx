@@ -316,7 +316,7 @@ export default function ClustersListPage() {
           </div>
           <div className="mt-4 flex gap-3">
             <button
-              onClick={fetchClusters}
+              onClick={() => fetchClusters()}
               className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg border border-red-500/30 transition-colors text-sm font-medium"
             >
               <svg

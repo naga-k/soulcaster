@@ -309,7 +309,7 @@ export default function ClusterDetailPage() {
           </div>
           <div className="mt-4 flex gap-3">
             <button
-              onClick={fetchCluster}
+              onClick={() => fetchCluster()}
               className="text-sm font-medium text-rose-400 hover:text-rose-300 transition-colors"
             >
               Try again
