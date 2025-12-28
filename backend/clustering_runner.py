@@ -216,6 +216,7 @@ def _run_vector_clustering(
     for i, item in enumerate(items):
         similar = vector_store.find_similar(
             embedding=embeddings_list[i],
+            project_id=project_id,
             top_k=20,
             min_score=VECTOR_CLUSTERING_THRESHOLD,
             exclude_ids=[str(item.id)],
