@@ -1582,6 +1582,54 @@ def set_sentry_levels(payload: SentryLevelsConfig, project_id: Optional[str] = Q
 # GENERIC INTEGRATION ENABLED STATE ENDPOINT
 # ============================================================
 
+@app.get("/config/{integration}/enabled")
+def get_integration_enabled(
+    integration: str,
+    project_id: Optional[str] = Query(None)
+):
+    """
+    Get the enabled state for any integration.
+
+    Supports: splunk, datadog, posthog, sentry
+
+    Parameters:
+        integration (str): Integration name (splunk, datadog, posthog, sentry).
+        project_id (str): Project identifier.
+
+    Returns:
+        dict: {"enabled": bool}
+
+    Raises:
+        HTTPException: 400 if integration is not supported.
+    """
+    pid = _require_project_id(project_id)
+
+    valid_integrations = ["splunk", "datadog", "posthog", "sentry"]
+    if integration not in valid_integrations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid integration: {integration}. Must be one of {valid_integrations}"
+        )
+
+    # Route to appropriate config function
+    if integration == "splunk":
+        enabled = get_splunk_config_value(pid, "enabled")
+    elif integration == "datadog":
+        enabled = get_datadog_config_value(pid, "enabled")
+    elif integration == "posthog":
+        enabled = get_posthog_config_value(pid, "enabled")
+    elif integration == "sentry":
+        enabled = get_sentry_config_value(pid, "enabled")
+    else:
+        enabled = None
+
+    # Default to True if not explicitly set
+    if enabled is None:
+        enabled = True
+
+    return {"enabled": enabled}
+
+
 @app.post("/config/{integration}/enabled")
 def set_integration_enabled(
     integration: str,

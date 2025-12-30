@@ -95,7 +95,7 @@ export default function SourceConfig() {
       icon: '⚠️',
       title: 'Sentry',
       description: 'Capture errors and performance issues',
-      enabled: false,
+      enabled: true,
     },
     {
       type: 'splunk' as const,
